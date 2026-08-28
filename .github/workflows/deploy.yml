@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir -p site/js
           cp index.html styles.css site/
-          cp js/*.js site/js/
+          cp -r js/. site/js/   # recursive: includes js/world/ and js/systems/
           # Serve verbatim, no Jekyll processing
           touch site/.nojekyll
 

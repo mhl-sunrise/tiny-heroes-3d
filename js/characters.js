@@ -1,6 +1,7 @@
-// characters.js — builds our two recognizable little heroes (and victims)
-// procedurally with Three.js. No external models: everything is geometry +
-// PBR materials + small canvas textures, so it stays tiny and loads fast.
+// characters.js â€” builds our little firefighter (the only hero) and the
+// trapped people, procedurally with Three.js. No external models: everything
+// is geometry + PBR materials + small canvas textures, so it stays tiny and
+// loads fast.
 import * as THREE from "three";
 
 /* ----------------------------- tiny helpers ----------------------------- */
@@ -14,74 +15,6 @@ function mesh(geo, mat) {
 }
 function capsule(r, len, mat, cap = 6, rad = 14) {
   return mesh(new THREE.CapsuleGeometry(r, len, cap, rad), mat);
-}
-
-/* --------------------------- procedural textures ------------------------ */
-// Multi-camouflage (green / tan / brown / dark) — the girl's uniform.
-function makeCamoTexture() {
-  const s = 256;
-  const cv = document.createElement("canvas");
-  cv.width = cv.height = s;
-  const ctx = cv.getContext("2d");
-  ctx.fillStyle = "#8a8b57"; // base khaki-green
-  ctx.fillRect(0, 0, s, s);
-  const blobs = [
-    ["#5b5f38", 34, 0.32],
-    ["#3d4a2c", 26, 0.24],
-    ["#c9b184", 30, 0.2],
-    ["#6e5636", 24, 0.16],
-    ["#2f3620", 18, 0.14],
-    ["#a89b74", 22, 0.16],
-  ];
-  for (const [col, count, rMax] of blobs) {
-    ctx.fillStyle = col;
-    for (let i = 0; i < count; i++) {
-      const x = Math.random() * s;
-      const y = Math.random() * s;
-      const r = 8 + Math.random() * rMax;
-      // irregular blob via overlapping circles
-      for (let k = 0; k < 3; k++) {
-        const ox = x + (Math.random() - 0.5) * r;
-        const oy = y + (Math.random() - 0.5) * r;
-        const rr = r * (0.4 + Math.random() * 0.6);
-        ctx.beginPath();
-        ctx.ellipse(ox, oy, rr, rr * 0.7, Math.random() * 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-  // light speckle
-  ctx.fillStyle = "rgba(230,225,190,0.35)";
-  for (let i = 0; i < 220; i++) {
-    ctx.fillRect(Math.random() * s, Math.random() * s, 2, 2);
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(2, 2);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// Tiger-stripe sock texture (orange base + dark stripes) for the boy.
-function makeTigerTexture() {
-  const s = 128;
-  const cv = document.createElement("canvas");
-  cv.width = cv.height = s;
-  const ctx = cv.getContext("2d");
-  ctx.fillStyle = "#ef7a25";
-  ctx.fillRect(0, 0, s, s);
-  ctx.strokeStyle = "#2a1c10";
-  ctx.lineWidth = 7;
-  for (let i = -2; i < 8; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * 20, -10);
-    ctx.bezierCurveTo(i * 20 + 14, 40, i * 20 - 10, 90, i * 20 + 6, s + 10);
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
 }
 
 // Soft radial blob used for fake contact shadows under characters.
@@ -101,7 +34,9 @@ function makeShadowTexture() {
 const _shadowTex = makeShadowTexture();
 
 /* ------------------------------ face builder --------------------------- */
-function buildFace(head, { skin, eye = 0x6b4a2f, brow }) {
+// Cute face used by every character. mood "smile" = hero, "worry" = trapped.
+function buildFace(head, { skin, eye = 0x6b4a2f, brow, r = 0.24, mood = "smile" }) {
+  const s = r / 0.24; // scale factor so the same code works on smaller heads
   const skinMat = std(skin, { roughness: 0.7 });
   const eyeWhite = std(0xffffff, { roughness: 0.35 });
   const irisMat = std(eye, { roughness: 0.25 });
@@ -114,65 +49,77 @@ function buildFace(head, { skin, eye = 0x6b4a2f, brow }) {
     opacity: 0.5,
   });
 
-  const R = 0.24; // head radius used by builder
-
   // Eyes (large, childlike)
   for (const sx of [-1, 1]) {
     const eyeG = new THREE.Group();
-    const white = mesh(new THREE.SphereGeometry(0.055, 20, 20), eyeWhite);
+    const white = mesh(new THREE.SphereGeometry(0.055 * s, 20, 20), eyeWhite);
     white.scale.set(1, 1.15, 0.7);
-    const iris = mesh(new THREE.SphereGeometry(0.028, 16, 16), irisMat);
-    iris.position.z = 0.028;
-    const pupil = mesh(new THREE.SphereGeometry(0.013, 12, 12), std(0x14100c, { roughness: 0.2 }));
-    pupil.position.z = 0.048;
-    const glint = mesh(new THREE.SphereGeometry(0.008, 8, 8), std(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.9 }));
-    glint.position.set(0.012, 0.014, 0.056);
+    const iris = mesh(new THREE.SphereGeometry(0.028 * s, 16, 16), irisMat);
+    iris.position.z = 0.028 * s;
+    const pupil = mesh(
+      new THREE.SphereGeometry(0.013 * s, 12, 12),
+      std(0x14100c, { roughness: 0.2 })
+    );
+    pupil.position.z = 0.048 * s;
+    const glint = mesh(
+      new THREE.SphereGeometry(0.008 * s, 8, 8),
+      std(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.9 })
+    );
+    glint.position.set(0.012 * s, 0.014 * s, 0.056 * s);
     eyeG.add(white, iris, pupil, glint);
-    eyeG.position.set(sx * 0.085, 0.02, R * 0.86);
+    eyeG.position.set(sx * 0.085 * s, (mood === "worry" ? 0.03 : 0.02) * s, r * 0.86);
     head.add(eyeG);
   }
 
-  // Eyebrows
+  // Eyebrows (raised inward when worried)
   for (const sx of [-1, 1]) {
-    const brow = mesh(new THREE.BoxGeometry(0.06, 0.014, 0.012), browMat);
-    brow.position.set(sx * 0.085, 0.095, R * 0.88);
-    brow.rotation.z = sx * -0.18;
-    head.add(brow);
+    const b = mesh(new THREE.BoxGeometry(0.06 * s, 0.014 * s, 0.012 * s), browMat);
+    b.position.set(sx * 0.085 * s, (mood === "worry" ? 0.11 : 0.095) * s, r * 0.88);
+    b.rotation.z = sx * (mood === "worry" ? 0.35 : -0.18);
+    head.add(b);
   }
 
   // Nose
-  const nose = mesh(new THREE.SphereGeometry(0.02, 12, 12), skinMat);
-  nose.position.set(0, -0.02, R * 0.92);
+  const nose = mesh(new THREE.SphereGeometry(0.02 * s, 12, 12), skinMat);
+  nose.position.set(0, -0.02 * s, r * 0.92);
   nose.scale.set(1, 0.8, 0.7);
   head.add(nose);
 
-  // Gentle smile
-  const smile = mesh(
-    new THREE.TorusGeometry(0.045, 0.009, 8, 16, Math.PI),
-    lipMat
-  );
-  smile.position.set(0, -0.05, R * 0.86);
-  smile.rotation.set(Math.PI, 0, Math.PI);
-  head.add(smile);
+  // Mouth: a smile, or an open "help!" mouth
+  if (mood === "worry") {
+    const mouth = mesh(
+      new THREE.SphereGeometry(0.03 * s, 12, 12),
+      std(0x8e3b47, { roughness: 0.6 })
+    );
+    mouth.scale.set(1, 1.25, 0.5);
+    mouth.position.set(0, -0.06 * s, r * 0.84);
+    head.add(mouth);
+  } else {
+    const smile = mesh(
+      new THREE.TorusGeometry(0.045 * s, 0.009 * s, 8, 16, Math.PI),
+      lipMat
+    );
+    smile.position.set(0, -0.05 * s, r * 0.86);
+    smile.rotation.set(Math.PI, 0, Math.PI);
+    head.add(smile);
+  }
 
   // Rosy cheeks
   for (const sx of [-1, 1]) {
-    const cheek = mesh(new THREE.SphereGeometry(0.035, 12, 12), cheekMat);
-    cheek.position.set(sx * 0.12, -0.03, R * 0.8);
+    const cheek = mesh(new THREE.SphereGeometry(0.035 * s, 12, 12), cheekMat);
+    cheek.position.set(sx * 0.12 * s, -0.03 * s, r * 0.8);
     cheek.scale.set(1, 0.7, 0.5);
     head.add(cheek);
   }
 
   // Ears
   for (const sx of [-1, 1]) {
-    const ear = mesh(new THREE.SphereGeometry(0.035, 12, 12), skinMat);
-    ear.position.set(sx * R * 0.96, -0.01, 0.01);
+    const ear = mesh(new THREE.SphereGeometry(0.035 * s, 12, 12), skinMat);
+    ear.position.set(sx * r * 0.96, -0.01 * s, 0.01 * s);
     ear.scale.set(0.6, 1, 0.8);
     head.add(ear);
   }
 }
-
-
 /* ------------------------------ body builder --------------------------- */
 const SKIN_R = 0.24;
 function buildKid(cfg) {
@@ -184,14 +131,15 @@ function buildKid(cfg) {
   const pantsMat = cfg.pants;
   const torsoMat = cfg.torso;
   const sleeveMat = cfg.sleeve || torsoMat;
-  const sockMat = cfg.sock;
+  const footMat = cfg.foot;
+  const gloveMat = cfg.glove || skinMat;
 
   const mkLeg = (sx) => {
     const lg = new THREE.Group();
     lg.position.set(sx * 0.12, 0.6, 0);
     const leg = capsule(0.11, 0.32, pantsMat);
     leg.position.y = -0.27;
-    const foot = mesh(new THREE.SphereGeometry(0.1, 14, 14), sockMat);
+    const foot = mesh(new THREE.SphereGeometry(0.1, 14, 14), footMat);
     foot.scale.set(1, 0.72, 1.35);
     foot.position.set(0, -0.47, 0.05);
     lg.add(leg, foot);
@@ -210,7 +158,7 @@ function buildKid(cfg) {
     ag.position.set(sx * 0.2, 1.02, 0);
     const arm = capsule(0.08, 0.3, sleeveMat);
     arm.position.y = -0.23;
-    const hand = mesh(new THREE.SphereGeometry(0.085, 14, 14), skinMat);
+    const hand = mesh(new THREE.SphereGeometry(0.085, 14, 14), gloveMat);
     hand.position.y = -0.42;
     ag.add(arm, hand);
     body.add(ag);
@@ -224,7 +172,12 @@ function buildKid(cfg) {
   const skull = mesh(new THREE.SphereGeometry(SKIN_R, 28, 28), skinMat);
   skull.scale.set(1, 1.03, 0.98);
   head.add(skull);
-  buildFace(head, { skin: cfg.skin, eye: cfg.eye, brow: cfg.brow });
+  buildFace(head, {
+    skin: cfg.skin,
+    eye: cfg.eye,
+    brow: cfg.brow,
+    mood: cfg.mood || "smile",
+  });
   body.add(head);
 
   return { g, body, armL, armR, legL, legR, head, torso };
@@ -245,14 +198,24 @@ function makeKidUpdate(k) {
     const t = state.time || 0;
     const idle = 1 - k._amp;
 
-    if (carrying) {
-      k.armL.rotation.x = -1.05;
-      k.armR.rotation.x = -1.05;
-      k.armL.rotation.z = 0.18;
-      k.armR.rotation.z = -0.18;
+    if (state.dragging) {
+      // Fireman's carry: shoulders under the load, arms up and back to
+      // cradle the person on the back, steady heavy strides.
+      k.armL.rotation.x = 2.2;
+      k.armR.rotation.x = 2.2;
+      k.armL.rotation.z = 0.3;
+      k.armR.rotation.z = -0.3;
+      k.legL.rotation.x = s * 0.6;
+      k.legR.rotation.x = -s * 0.6;
+      k.torso.rotation.x = 0.18;
+    } else if (carrying) {
+      k.armL.rotation.x = -0.75;
+      k.armR.rotation.x = -0.75;
+      k.armL.rotation.z = 0.3;
+      k.armR.rotation.z = -0.3;
       k.legL.rotation.x = s * 0.28;
       k.legR.rotation.x = -s * 0.28;
-      k.torso.rotation.x = 0.06;
+      k.torso.rotation.x = 0.1;
     } else {
       k.armL.rotation.x = s * amp;
       k.armR.rotation.x = -s * amp;
@@ -265,13 +228,11 @@ function makeKidUpdate(k) {
 
     k.torso.position.y = 0.84 + Math.abs(Math.sin(phase)) * 0.03 * k._amp;
     k.body.position.y =
-      Math.abs(Math.sin(phase)) * 0.02 * k._amp +
-      Math.sin(t * 2) * 0.008 * idle;
+      Math.abs(Math.sin(phase)) * 0.02 * k._amp + Math.sin(t * 2) * 0.008 * idle;
     k.head.rotation.x = Math.sin(t * 1.3) * 0.03 + (moving ? -0.05 : 0);
     k.head.rotation.y = Math.sin(t * 0.9) * 0.05;
   };
 }
-
 // Fake contact shadow (cheap, looks great over a dark floor).
 function addBlob(g, scale = 0.72) {
   const m = new THREE.Mesh(
@@ -289,37 +250,151 @@ function addBlob(g, scale = 0.72) {
   g.add(m);
 }
 
+/* --------------------------- coat texture ------------------------------ */
+// Navy turnout coat with silver + chartreuse reflective bands. Capsule UVs:
+// u = around the body, v = top to bottom, so full-width texture rows wrap
+// into reflective bands around the coat.
+function makeCoatTexture() {
+  const s = 256;
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = s;
+  const ctx = cv.getContext("2d");
 
-/* ----------------------------- THE BOY -------------------------------- */
-export function createBoy() {
-  const navy = std(0x17223f, { roughness: 0.55, metalness: 0.05 });
+  const grad = ctx.createLinearGradient(0, 0, 0, s);
+  grad.addColorStop(0, "#2c3d6b");
+  grad.addColorStop(1, "#1b2748");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, s, s);
+  // fabric speckle
+  ctx.fillStyle = "rgba(255,255,255,0.05)";
+  for (let i = 0; i < 500; i++) ctx.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+  ctx.fillStyle = "rgba(0,0,0,0.08)";
+  for (let i = 0; i < 500; i++) ctx.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+
+  const band = (y, h) => {
+    ctx.fillStyle = "#cfd6e4";
+    ctx.fillRect(0, y, s, h);
+    ctx.fillStyle = "#dfff5e";
+    ctx.fillRect(0, y + h * 0.28, s, h * 0.44);
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.fillRect(0, y + 2, s, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(0, y + h - 2, s, 2);
+  };
+  band(74, 24); // chest
+  band(150, 24); // waist
+  band(216, 22); // hem
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+/* ----------------------------- THE FIREFIGHTER -------------------------- */
+export function createFirefighter() {
+  const coatTex = makeCoatTexture();
+  const coat = std(0xffffff, { map: coatTex, roughness: 0.6, metalness: 0.05 });
+  const navy = std(0x1b2748, { roughness: 0.6 });
+  const bootMat = std(0x14161c, { roughness: 0.45, metalness: 0.1 });
+  const gloveMat = std(0xf2a444, { roughness: 0.7 });
+  const orange = std(0xf5821f, { roughness: 0.5 });
+  const orangeDark = std(0xc96511, { roughness: 0.55 });
+  const silver = std(0xd9dfe8, { roughness: 0.3, metalness: 0.6 });
   const lime = std(0xc8ff4d, {
     emissive: 0x9dff1f,
-    emissiveIntensity: 1.1,
+    emissiveIntensity: 0.8,
     roughness: 0.5,
   });
-  const orange = std(0xf26a1b, { roughness: 0.6 });
-  const black = std(0x14161c, { roughness: 0.5 });
-  const tigerMat = std(0xffffff, { map: makeTigerTexture(), roughness: 0.7 });
 
   const k = buildKid({
     pants: navy,
-    torso: navy,
-    sleeve: navy,
-    sock: tigerMat,
+    torso: coat,
+    sleeve: coat,
+    foot: bootMat,
+    glove: gloveMat,
     skin: 0xf2c9a0,
-    eye: 0x6b4a2f,
-    brow: 0x9a6a3e,
+    eye: 0x5a3d28,
+    brow: 0x7a4b2a,
   });
 
-  // Reflective chartreuse stripes — the signature firefighter look
+  // --- Helmet: dome + brim + front peak + crest + shield + lamp + band.
+  // All parts are HEAD-LOCAL (the head group sits at y=1.3 in the body).
+  // The dome hugs the skull (head r=0.24): rim wraps 2cm outside the head,
+  // top sits 1cm above the skull — real helmet clearance, not a floating ball.
+  const helmet = new THREE.Group();
+  helmet.position.y = 0;
+  const dome = mesh(
+    new THREE.SphereGeometry(0.26, 26, 16, 0, Math.PI * 2, 0, Math.PI * 0.56),
+    orange
+  );
+  helmet.add(dome);
+  const brim = mesh(new THREE.CylinderGeometry(0.3, 0.315, 0.04, 24), orangeDark);
+  brim.position.y = -0.045;
+  helmet.add(brim);
+  // front peak: half-pipe whose arc covers the +Z (face) side
+  const peak = mesh(
+    new THREE.CylinderGeometry(0.14, 0.155, 0.03, 18, 1, false, -Math.PI / 2, Math.PI),
+    orangeDark
+  );
+  peak.position.set(0, -0.048, 0.2);
+  helmet.add(peak);
+  const crest = mesh(new THREE.BoxGeometry(0.06, 0.05, 0.3), orangeDark);
+  crest.position.set(0, 0.245, 0.02);
+  helmet.add(crest);
+  const shield = mesh(new THREE.BoxGeometry(0.14, 0.07, 0.03), silver);
+  shield.position.set(0, 0.03, 0.25);
+  shield.rotation.x = -0.1;
+  helmet.add(shield);
+  const band = mesh(new THREE.TorusGeometry(0.252, 0.015, 8, 24), lime);
+  band.rotation.x = Math.PI / 2;
+  band.position.y = -0.03;
+  helmet.add(band);
+  const lamp = mesh(
+    new THREE.SphereGeometry(0.035, 12, 12),
+    std(0xfff6d8, { emissive: 0xffe9a8, emissiveIntensity: 2.2, roughness: 0.3 })
+  );
+  lamp.scale.set(1, 0.8, 0.6);
+  lamp.position.set(0, 0.13, 0.22);
+  helmet.add(lamp);
+  k.head.add(helmet);
+  // --- SCBA air tank on the back
+  const tank = capsule(0.09, 0.24, silver);
+  tank.position.set(0, 0.98, -0.26);
+  k.body.add(tank);
+  const valve = mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.06, 12), orangeDark);
+  valve.position.set(0, 1.18, -0.26);
+  k.body.add(valve);
+
+  // Shoulder straps holding the tank
+  const strapMat = std(0x10131c, { roughness: 0.7 });
   for (const sx of [-1, 1]) {
-    const strip = mesh(new THREE.BoxGeometry(0.035, 0.34, 0.02), lime);
-    strip.position.set(sx * 0.09, 0.9, 0.185);
-    k.body.add(strip);
+    const strap = mesh(new THREE.BoxGeometry(0.05, 0.42, 0.03), strapMat);
+    strap.position.set(sx * 0.1, 0.95, 0.195);
+    strap.rotation.z = sx * 0.16;
+    k.body.add(strap);
   }
+
+  // Belt + silver buckle
+  const belt = mesh(new THREE.TorusGeometry(0.21, 0.035, 10, 22), strapMat);
+  belt.rotation.x = Math.PI / 2;
+  belt.position.y = 0.62;
+  k.body.add(belt);
+  const buckle = mesh(new THREE.BoxGeometry(0.07, 0.06, 0.03), silver);
+  buckle.position.set(0, 0.62, 0.2);
+  k.body.add(buckle);
+
+  // Epaulettes + chest patch
+  for (const sx of [-1, 1]) {
+    const ep = mesh(new THREE.BoxGeometry(0.09, 0.03, 0.12), orange);
+    ep.position.set(sx * 0.17, 1.13, 0);
+    k.body.add(ep);
+  }
+  const patch = mesh(new THREE.BoxGeometry(0.09, 0.06, 0.02), orange);
+  patch.position.set(0.13, 1.06, 0.185);
+  k.body.add(patch);
+
+  // Silver reflective rings at cuffs + ankles (the classic safety trim)
   const mkRing = (radius) => {
-    const ring = mesh(new THREE.TorusGeometry(radius, 0.014, 8, 18), lime);
+    const ring = mesh(new THREE.TorusGeometry(radius, 0.014, 8, 18), silver);
     ring.rotation.x = Math.PI / 2;
     return ring;
   };
@@ -336,175 +411,194 @@ export function createBoy() {
   ankR.position.y = -0.4;
   k.legR.add(ankR);
 
-  // Orange crossbody messenger bag + strap
-  const strap = mesh(new THREE.BoxGeometry(0.07, 0.52, 0.02), black);
-  strap.position.set(0, 0.95, 0.185);
-  strap.rotation.z = -0.55;
-  k.body.add(strap);
-  const bag = mesh(new THREE.BoxGeometry(0.24, 0.18, 0.12), orange);
-  bag.position.set(0.14, 0.64, 0.16);
-  bag.rotation.z = -0.12;
-  const flap = mesh(new THREE.BoxGeometry(0.2, 0.1, 0.03), black);
-  flap.position.set(0.14, 0.7, 0.215);
-  flap.rotation.z = -0.12;
-  k.body.add(bag, flap);
-
-  // Buzzed light-brown hair (short cap over the crown) + fringe
-  const hairMat = std(0xb08a5c, { roughness: 1 });
-  const hair = mesh(
-    new THREE.SphereGeometry(0.253, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.52),
-    hairMat
-  );
-  hair.position.y = 0.01;
-  k.head.add(hair);
-  const fringe = mesh(
-    new THREE.SphereGeometry(0.248, 20, 12, -Math.PI * 0.42, Math.PI * 0.84, 0, Math.PI * 0.32),
-    hairMat
-  );
-  fringe.position.set(0, 0.03, 0.01);
-  k.head.add(fringe);
-
   addBlob(k.g);
-  return Object.assign(k, { update: makeKidUpdate(k), kind: "boy" });
+  return Object.assign(k, { update: makeKidUpdate(k), kind: "firefighter" });
 }
-
-
-/* ----------------------------- THE GIRL ------------------------------- */
-export function createGirl() {
-  const camoTex = makeCamoTexture();
-  const camo = std(0xffffff, { map: camoTex, roughness: 1 });
-  const camoPants = std(0xffffff, { map: camoTex, roughness: 1 });
-  const whiteSock = std(0xf3f0ea, { roughness: 0.85 });
-  const buttonMat = std(0x2a2116, { roughness: 0.6 });
-  const pocketMat = std(0xffffff, { map: camoTex, roughness: 1 });
-
-  const k = buildKid({
-    pants: camoPants,
-    torso: camo,
-    sleeve: camo,
-    sock: whiteSock,
-    skin: 0xf0c6a0,
-    eye: 0x6b4a2f,
-    brow: 0x8a5a34,
-  });
-
-  // Military collar
-  const collar = mesh(new THREE.TorusGeometry(0.11, 0.03, 10, 20), camo);
-  collar.rotation.x = Math.PI / 2;
-  collar.position.y = 1.09;
-  k.body.add(collar);
-  // Buttons down the front
-  for (let i = 0; i < 4; i++) {
-    const b = mesh(new THREE.SphereGeometry(0.014, 8, 8), buttonMat);
-    b.position.set(0, 1.0 - i * 0.09, 0.19);
-    k.body.add(b);
-  }
-  // Chest pockets
-  for (const sx of [-1, 1]) {
-    const p = mesh(new THREE.BoxGeometry(0.09, 0.09, 0.03), pocketMat);
-    p.position.set(sx * 0.09, 0.9, 0.19);
-    k.body.add(p);
-  }
-
-  // Hair: auburn crown + fringe + ponytail + clips
-  const hairMat = std(0xa5673f, { roughness: 0.95 });
-  const crown = mesh(
-    new THREE.SphereGeometry(0.258, 26, 20, 0, Math.PI * 2, 0, Math.PI * 0.58),
-    hairMat
-  );
-  crown.position.y = 0.01;
-  k.head.add(crown);
-  const fringe = mesh(
-    new THREE.SphereGeometry(0.252, 22, 14, -Math.PI * 0.5, Math.PI, 0, Math.PI * 0.34),
-    hairMat
-  );
-  fringe.position.set(0, 0.02, 0.02);
-  fringe.scale.set(1, 1.05, 1);
-  k.head.add(fringe);
-  // side hair (locks falling by the cheeks)
-  for (const sx of [-1, 1]) {
-    const lock = mesh(new THREE.CapsuleGeometry(0.05, 0.16, 6, 12), hairMat);
-    lock.position.set(sx * 0.215, -0.05, 0.06);
-    lock.rotation.z = sx * -0.15;
-    k.head.add(lock);
-  }
-  // Ponytail
-  const tail = mesh(new THREE.ConeGeometry(0.09, 0.5, 16), hairMat);
-  tail.position.set(0.02, -0.05, -0.22);
-  tail.rotation.x = 0.5;
-  tail.scale.set(1, 1, 0.7);
-  k.head.add(tail);
-  const tie = mesh(new THREE.TorusGeometry(0.05, 0.018, 8, 16), std(0xffd34d, { roughness: 0.5 }));
-  tie.position.set(0.02, 0.12, -0.17);
-  tie.rotation.x = 0.5;
-  k.head.add(tie);
-  // Hair clips (small silver barrettes on the right side)
-  const clipMat = std(0xe9ecf5, { emissive: 0x8899bb, emissiveIntensity: 0.4, roughness: 0.4, metalness: 0.3 });
-  for (let i = 0; i < 2; i++) {
-    const clip = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.07, 8), clipMat);
-    clip.position.set(0.17, 0.06 - i * 0.05, 0.13);
-    clip.rotation.z = Math.PI / 2;
-    k.head.add(clip);
-  }
-
-  addBlob(k.g);
-  return Object.assign(k, { update: makeKidUpdate(k), kind: "girl" });
-}
-
 
 /* ------------------------------ VICTIMS -------------------------------- */
-// A small stylized trapped person with a glowing "!" marker and a halo.
+// A small stylized trapped person with a full cute face, varied hair,
+// clothes and accessories, a glowing "!" marker and a ground halo.
+const HAIR_COLORS = [0x4a3423, 0x2c1d12, 0xb08a5c, 0xd8a24a, 0x8e3b1f, 0x5a3d28];
+const SKIN_TONES = [0xf2c9a0, 0xf0c6a0, 0xd9a06b, 0xc98a55, 0x8d5a3a];
+
+function buildHair(head, style, mat) {
+  if (style === "short") {
+    const cap = mesh(
+      new THREE.SphereGeometry(0.216, 22, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      mat
+    );
+    cap.position.y = 0.01;
+    head.add(cap);
+  } else if (style === "long") {
+    const cap = mesh(
+      new THREE.SphereGeometry(0.222, 22, 16, 0, Math.PI * 2, 0, Math.PI * 0.62),
+      mat
+    );
+    cap.position.y = 0.01;
+    head.add(cap);
+    for (const sx of [-1, 1]) {
+      const lock = capsule(0.055, 0.24, mat);
+      lock.position.set(sx * 0.19, -0.14, 0.02);
+      lock.rotation.z = sx * -0.12;
+      head.add(lock);
+    }
+  } else if (style === "ponytail") {
+    const cap = mesh(
+      new THREE.SphereGeometry(0.216, 22, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      mat
+    );
+    cap.position.y = 0.01;
+    head.add(cap);
+    const tail = mesh(new THREE.ConeGeometry(0.07, 0.42, 14), mat);
+    tail.position.set(0, -0.06, -0.2);
+    tail.rotation.x = 0.55;
+    head.add(tail);
+    const tie = mesh(
+      new THREE.TorusGeometry(0.045, 0.016, 8, 14),
+      std(0xffd34d, { roughness: 0.5 })
+    );
+    tie.position.set(0, 0.1, -0.16);
+    tie.rotation.x = 0.55;
+    head.add(tie);
+  } else {
+    // curly: a cluster of puffs
+    const cap = mesh(
+      new THREE.SphereGeometry(0.214, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5),
+      mat
+    );
+    cap.position.y = 0.01;
+    head.add(cap);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.5;
+      const puff = mesh(new THREE.SphereGeometry(0.075, 12, 10), mat);
+      puff.position.set(Math.cos(a) * 0.17, 0.13, Math.sin(a) * 0.15 - 0.02);
+      head.add(puff);
+    }
+  }
+}
+
+function makeTeddy() {
+  const t = new THREE.Group();
+  const fur = std(0xa5713f, { roughness: 1 });
+  const bodyB = mesh(new THREE.SphereGeometry(0.09, 14, 12), fur);
+  bodyB.scale.set(1, 1.15, 0.9);
+  t.add(bodyB);
+  const headB = mesh(new THREE.SphereGeometry(0.07, 14, 12), fur);
+  headB.position.y = 0.14;
+  t.add(headB);
+  for (const sx of [-1, 1]) {
+    const ear = mesh(new THREE.SphereGeometry(0.028, 10, 8), fur);
+    ear.position.set(sx * 0.055, 0.2, 0);
+    t.add(ear);
+  }
+  const snout = mesh(
+    new THREE.SphereGeometry(0.025, 10, 8),
+    std(0xe8c39a, { roughness: 0.9 })
+  );
+  snout.position.set(0, 0.13, 0.06);
+  t.add(snout);
+  return t;
+}
 export function createVictim(opts = {}) {
   const g = new THREE.Group();
   const body = new THREE.Group();
   g.add(body);
-  const skin = std(0xf0c6a0, { roughness: 0.75 });
-  const shirtMat = std(opts.color || 0x4a90d9, { roughness: 0.85 });
-  const pantsMat = std(0x2f3542, { roughness: 0.9 });
 
+  const skinTone = opts.skin ?? SKIN_TONES[(Math.random() * SKIN_TONES.length) | 0];
+  const skin = std(skinTone, { roughness: 0.75 });
+  const shirtMat = std(opts.color || 0x4a90d9, { roughness: 0.85 });
+  const pantsMat = std(
+    opts.pants ?? [0x2f3542, 0x3a4a5e, 0x4a3a2e, 0x33424a][(Math.random() * 4) | 0],
+    { roughness: 0.9 }
+  );
+  const shoeMat = std(0x22190f, { roughness: 0.5 });
+
+  // Legs + shoes
   for (const sx of [-1, 1]) {
     const leg = capsule(0.09, 0.24, pantsMat);
     leg.position.set(sx * 0.1, 0.5, 0);
     body.add(leg);
+    const shoe = mesh(new THREE.SphereGeometry(0.085, 14, 12), shoeMat);
+    shoe.scale.set(1, 0.7, 1.35);
+    shoe.position.set(sx * 0.1, 0.07, 0.04);
+    body.add(shoe);
   }
+
+  // Torso + collar + buttons
   const torso = capsule(0.17, 0.34, shirtMat);
   torso.position.y = 0.78;
   body.add(torso);
-
-  const armL = new THREE.Group();
-  armL.position.set(-0.17, 0.95, 0);
-  armL.add(capsule(0.06, 0.26, shirtMat)).position.y = -0.18;
-  const handL = mesh(new THREE.SphereGeometry(0.06, 10, 10), skin);
-  handL.position.y = -0.36;
-  armL.add(handL);
-  body.add(armL);
-
-  const armR = new THREE.Group();
-  armR.position.set(0.17, 0.95, 0);
-  armR.add(capsule(0.06, 0.26, shirtMat)).position.y = -0.18;
-  const handR = mesh(new THREE.SphereGeometry(0.06, 10, 10), skin);
-  handR.position.y = -0.36;
-  armR.add(handR);
-  body.add(armR);
-
-  const head = new THREE.Group();
-  head.position.y = 1.15;
-  head.add(mesh(new THREE.SphereGeometry(0.19, 20, 20), skin));
-  for (const sx of [-1, 1]) {
-    const eye = mesh(new THREE.SphereGeometry(0.022, 10, 10), std(0x20201a, { roughness: 0.4 }));
-    eye.position.set(sx * 0.06, 0.02, 0.16);
-    head.add(eye);
-  }
-  const mouth = mesh(new THREE.SphereGeometry(0.03, 10, 10), std(0xb5606a));
-  mouth.scale.set(1, 0.5, 0.5);
-  mouth.position.set(0, -0.05, 0.16);
-  head.add(mouth);
-  const hair = mesh(
-    new THREE.SphereGeometry(0.196, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.5),
-    std(opts.hair || 0x4a3423, { roughness: 1 })
+  const collar = mesh(
+    new THREE.TorusGeometry(0.09, 0.025, 8, 16),
+    std(0xf0ece4, { roughness: 0.8 })
   );
-  head.add(hair);
+  collar.rotation.x = Math.PI / 2;
+  collar.position.y = 0.99;
+  body.add(collar);
+  for (let i = 0; i < 3; i++) {
+    const b = mesh(new THREE.SphereGeometry(0.012, 8, 8), std(0xffffff, { roughness: 0.4 }));
+    b.position.set(0, 0.92 - i * 0.08, 0.155);
+    body.add(b);
+  }
+
+  // Arms (sleeve + skin hand)
+  const mkArm = (sx) => {
+    const armG = new THREE.Group();
+    armG.position.set(sx * 0.17, 0.95, 0);
+    const sleeve = capsule(0.06, 0.18, shirtMat);
+    sleeve.position.y = -0.14;
+    const fore = capsule(0.05, 0.1, skin);
+    fore.position.y = -0.3;
+    const hand = mesh(new THREE.SphereGeometry(0.055, 12, 10), skin);
+    hand.position.y = -0.4;
+    armG.add(sleeve, fore, hand);
+    body.add(armG);
+    return armG;
+  };
+  const armL = mkArm(-1);
+  const armR = mkArm(1);
+
+  // Head with the full cute face + worried expression
+  const head = new THREE.Group();
+  head.position.y = 1.18;
+  const skull = mesh(new THREE.SphereGeometry(0.21, 24, 24), skin);
+  skull.scale.set(1, 1.02, 0.98);
+  head.add(skull);
+  buildFace(head, {
+    skin: skinTone,
+    eye: opts.eye ?? 0x5a4632,
+    brow: opts.hair ?? 0x4a3423,
+    r: 0.21,
+    mood: "worry",
+  });
+  const hairStyle =
+    opts.hairStyle ?? ["short", "long", "ponytail", "curly"][(Math.random() * 4) | 0];
+  const hairMat = std(
+    opts.hair ?? HAIR_COLORS[(Math.random() * HAIR_COLORS.length) | 0],
+    { roughness: 0.95 }
+  );
+  buildHair(head, hairStyle, hairMat);
   body.add(head);
+  // Accessories: scarf for some, teddy bear for others
+  if (opts.teddy || Math.random() < 0.3) {
+    const teddy = makeTeddy();
+    teddy.position.set(0.2, 0.98, 0.12);
+    teddy.rotation.y = -0.4;
+    body.add(teddy);
+  } else if (opts.scarf || Math.random() < 0.4) {
+    const scarfColor = opts.scarfColor ?? 0xd94f30;
+    const scarf = mesh(
+      new THREE.TorusGeometry(0.1, 0.04, 8, 18),
+      std(scarfColor, { roughness: 0.9 })
+    );
+    scarf.rotation.x = Math.PI / 2;
+    scarf.position.y = 1.02;
+    body.add(scarf);
+    const tail = capsule(0.04, 0.14, std(scarfColor, { roughness: 0.9 }));
+    tail.position.set(0.06, 0.92, 0.12);
+    tail.rotation.z = 0.2;
+    body.add(tail);
+  }
 
   // Floating "!" marker (glows via bloom)
   const markMat = std(0xffd34d, { emissive: 0xffb020, emissiveIntensity: 1.6, roughness: 0.4 });
@@ -515,7 +609,7 @@ export function createVictim(opts = {}) {
   const dot = mesh(new THREE.SphereGeometry(0.05, 12, 12), markMat);
   dot.position.y = -0.1;
   mark.add(dot);
-  mark.position.y = 1.78;
+  mark.position.y = 1.82;
   g.add(mark);
 
   // Ground halo marking the rescue spot
@@ -537,13 +631,16 @@ export function createVictim(opts = {}) {
 
   function update(time) {
     const t = time + phase;
-    armR.rotation.x = -1.1 + Math.sin(t * 3) * 0.45;
-    armR.rotation.z = -0.5 + Math.sin(t * 3) * 0.12;
-    armL.rotation.x = Math.sin(t * 1.5) * 0.06;
-    mark.position.y = 1.78 + Math.sin(t * 2) * 0.09;
+    // scared waving + trembling
+    armR.rotation.x = -1.1 + Math.sin(t * 3.2) * 0.5;
+    armR.rotation.z = -0.5 + Math.sin(t * 3.2) * 0.14;
+    armL.rotation.x = Math.sin(t * 1.7) * 0.1;
+    mark.position.y = 1.82 + Math.sin(t * 2) * 0.09;
     mark.rotation.y = t * 1.6;
     body.position.y = Math.abs(Math.sin(t * 2.2)) * 0.02;
+    body.position.x = Math.sin(t * 24) * 0.006; // nervous tremble
+    body.rotation.z = Math.sin(t * 24) * 0.01;
     halo.material.opacity = 0.55 + Math.sin(t * 4) * 0.2;
   }
-  return { g, update, halo, mark };
+  return { g, update, halo, mark, armR, armL, body };
 }

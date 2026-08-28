@@ -33,24 +33,17 @@
       <div class="badge">A little rescue mission</div>
       <h1>Little&nbsp;Firefighters</h1>
       <p class="subtitle">
-        A fire is spreading through the building. Guide our two heroes
-        through the smoke, reach the trapped people and carry them
-        to safety — before it's too late.
+        A fire is spreading through the building. Guide our little
+        firefighter through the smoke, reach the trapped people and
+        carry them to safety — before it's too late.
       </p>
 
       <div class="heroes">
         <div class="hero-chip">
-          <canvas id="portrait-boy" width="120" height="120"></canvas>
+          <canvas id="portrait-hero" width="120" height="120"></canvas>
           <div class="hero-meta">
             <strong>Firefighter</strong>
             <span>Brave &amp; quick</span>
-          </div>
-        </div>
-        <div class="hero-chip">
-          <canvas id="portrait-girl" width="120" height="120"></canvas>
-          <div class="hero-meta">
-            <strong>Rescuer</strong>
-            <span>Steady &amp; kind</span>
           </div>
         </div>
       </div>
@@ -71,6 +64,17 @@
   <!-- ============ HUD ============ -->
   <div id="hud" class="hidden">
     <div class="hud-top">
+      <div class="stat health" id="healthBox">
+        <span class="stat-label"><span id="heartIcon">❤️</span><span class="label-text">Health</span></span>
+        <div class="health-bar"><div id="healthFill" class="health-fill"></div></div>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Score</span>
+        <span class="stat-value"><b id="scoreValue">0</b></span>
+      </div>
+      <div class="stat level">
+        <span class="stat-value" id="levelName">Lv 1</span>
+      </div>
       <div class="stat saved">
         <span class="stat-label">Saved</span>
         <span class="stat-value"><b id="savedCount">0</b> / <span id="totalCount">0</span></span>
@@ -98,6 +102,9 @@
 
     <!-- Danger vignette -->
     <div id="dangerVignette" class="danger-vignette"></div>
+
+    <!-- Ultra-danger heat tint (fades in with the canvas blur) -->
+    <div id="heatTint" class="heat-tint"></div>
   </div>
 
   <!-- ============ PAUSE ============ -->
@@ -121,6 +128,7 @@
       <div class="result-stats">
         <div class="rstat"><span id="resultSaved">0</span><label>people saved</label></div>
         <div class="rstat"><span id="resultTime">0:00</span><label>time</label></div>
+        <div class="rstat"><span id="resultScore">0</span><label>score</label></div>
       </div>
       <button id="againBtn" class="big-btn">↻&nbsp; Play again</button>
       <button id="menuBtn" class="ghost-btn">↩&nbsp; Main menu</button>
@@ -134,6 +142,26 @@
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
       }
     }
+  </script>
+
+  <script>
+    // Surface load/init errors on the loading screen instead of a silent
+    // spinner. Registered BEFORE the module loads so even a failed import
+    // (offline CDN, stale cache) shows a message.
+    window.addEventListener("error", function (e) {
+      var el = document.querySelector(".loading-text");
+      var ld = document.getElementById("loading");
+      if (el && ld && !ld.classList.contains("hidden")) {
+        el.textContent = "⚠ " + (e.message || "failed to load — check connection, then hard-refresh (Ctrl+F5)");
+      }
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      var el = document.querySelector(".loading-text");
+      var ld = document.getElementById("loading");
+      if (el && ld && !ld.classList.contains("hidden")) {
+        el.textContent = "⚠ " + ((e.reason && e.reason.message) || "failed to load a script — hard-refresh (Ctrl+F5)");
+      }
+    });
   </script>
 
   <script type="module" src="./js/main.js"></script>

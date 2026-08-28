@@ -112,6 +112,106 @@ class AudioBus {
     notes.forEach((n, i) => setTimeout(() => this.blip(n, 0.16, "sine", 0.5), i * 90));
   }
 
+  // Low-HP heartbeat: two soft thumps, repeated while `on` is true.
+  heartbeat(on) {
+    if (on && this._ready && !this._hbOn) this._hbTick();
+    this._hbOn = !!on;
+  }
+  _hbTick() {
+    if (!this._hbOn || !this._ready) return;
+    this.blip(72, 0.1, "sine", 0.5);
+    setTimeout(() => this.blip(58, 0.09, "sine", 0.35), 150);
+    setTimeout(() => this._hbTick(), 850);
+  }
+
+  // Level-up fanfare.
+  // Fire-escape creak while climbing up a floor
+  climb() {
+    for (let i = 0; i < 6; i++) {
+      setTimeout(
+        () => this.blip(120 + Math.random() * 70, 0.1, "square", 0.12),
+        i * 380
+      );
+    }
+  }
+
+  levelUp() {
+    const notes = [330, 415, 494, 659, 831];
+    notes.forEach((n, i) => setTimeout(() => this.blip(n, 0.18, "triangle", 0.5), i * 110));
+  }
+
+  // Continuous fire-truck siren (slow warble), quiet in the background.
+  startSiren() {
+    if (!this._ready || this._siren) return;
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = 620;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 1.1;
+    const lg = ctx.createGain();
+    lg.gain.value = 240;
+    lfo.connect(lg).connect(o.frequency);
+    const g = ctx.createGain();
+    g.gain.value = 0.035;
+    o.connect(g).connect(this.master);
+    o.start();
+    lfo.start();
+    this._siren = { o, lfo, g };
+  }
+  stopSiren() {
+    if (!this._siren) return;
+    const { o, lfo, g } = this._siren;
+    const t = this.ctx.currentTime;
+    g.gain.setTargetAtTime(0, t, 0.15);
+    setTimeout(() => {
+      try {
+        o.stop();
+        lfo.stop();
+      } catch (e) {
+        /* already stopped */
+      }
+    }, 500);
+    this._siren = null;
+  }
+
+  // --- Tension: falling debris + ultra danger
+  whoosh() {
+    // debris cutting the air overhead
+    this.blip(900, 0.09, "sawtooth", 0.1);
+    setTimeout(() => this.blip(500, 0.12, "sawtooth", 0.08), 60);
+  }
+  boom() {
+    // debris impact: a real bang — deep thump, crack, ring
+    this.blip(55, 0.35, "sine", 0.7);
+    this.blip(110, 0.2, "triangle", 0.4);
+    this.blip(420, 0.07, "sawtooth", 0.22);
+  }
+  thud() {
+    this.blip(70, 0.22, "sine", 0.5);
+    this.blip(120, 0.1, "triangle", 0.3);
+  }
+  closeCall() {
+    // bright chime — the reward for a near miss
+    this.blip(880, 0.07, "triangle", 0.35);
+    setTimeout(() => this.blip(1320, 0.12, "triangle", 0.35), 70);
+  }
+  rumble() {
+    // building groans before a debris burst
+    for (let i = 0; i < 4; i++) {
+      setTimeout(
+        () => this.blip(45 + Math.random() * 25, 0.3, "sawtooth", 0.22),
+        i * 320
+      );
+    }
+  }
+  dangerSting() {
+    // ultra-danger entry
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => this.blip(1200 + i * 200, 0.06, "square", 0.18), i * 90);
+    }
+  }
+
   win() {
     const notes = [392, 523.25, 659.25, 783.99, 1046.5];
     notes.forEach((n, i) => setTimeout(() => this.blip(n, 0.3, "triangle", 0.55), i * 140));

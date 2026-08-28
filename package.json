@@ -2,9 +2,9 @@
   "name": "little-firefighters",
   "version": "1.0.0",
   "type": "module",
-  "description": "A Three.js web game - two kids save people from a building fire. Runs in any modern mobile/desktop browser.",
+  "description": "A Three.js web game - a little firefighter carries people to safety from a burning multistory building across three shifts. Runs in any modern mobile/desktop browser.",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check js/main.js && node --check js/game.js && node --check js/world.js && node --check js/characters.js && node --check js/input.js && node --check js/effects.js && node --check js/audio.js && echo OK"
+    "check": "node --check js/main.js && node --check js/game.js && node --check js/config.js && node --check js/characters.js && node --check js/input.js && node --check js/effects.js && node --check js/audio.js && node --check js/systems/health.js && node --check js/systems/hud.js && node --check js/world/index.js && node --check js/world/sky.js && node --check js/world/building.js && node --check js/world/street.js && node --check js/world/furniture.js && node --check js/world/debris.js && node --check js/world/sparks.js && node --check js/world/fire.js && node --check js/world/smoke.js && node --check js/world/truck.js && echo OK"
   }
 }

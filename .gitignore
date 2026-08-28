@@ -8,3 +8,7 @@ _m.*
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Scratch / packaging
+github.zip
+_restart-server.ps1

@@ -1,27 +1,22 @@
 // main.js — entry point: renderer, scene, camera, world, post, input, audio,
 // game, and all UI wiring + the render loop.
 import * as THREE from "three";
-import { Game, LEVEL_TIME } from "./game.js";
+import { Game } from "./game.js";
+import { LEVELS } from "./config.js";
 import { Input } from "./input.js";
 import { createPost } from "./effects.js";
-import { createWorld } from "./world.js";
-import { createBoy, createGirl } from "./characters.js";
+import { createWorld } from "./world/index.js";
+import { createHud } from "./systems/hud.js";
 import AudioBus from "./audio.js";
 
 const $ = (id) => document.getElementById(id);
 
-// --- DOM refs ---
+// --- DOM refs (HUD DOM lives in systems/hud.js) ---
 const loadingEl = $("loading");
 const titleEl = $("title");
 const hudEl = $("hud");
 const pauseEl = $("pause");
 const resultEl = $("result");
-const savedCountEl = $("savedCount");
-const totalCountEl = $("totalCount");
-const timerValueEl = $("timerValue");
-const timerBoxEl = $("timerBox");
-const interactPromptEl = $("interactPrompt");
-const dangerEl = $("dangerVignette");
 const actionBtn = $("actionBtn");
 const joystickEl = $("joystick");
 const knobEl = $("joyKnob");
@@ -62,52 +57,9 @@ const post = createPost(renderer, scene, camera);
 const input = new Input({ joystickEl, knobEl, actionEl: actionBtn });
 const audio = new AudioBus();
 
-function fmtTime(s) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return m + ":" + String(sec).padStart(2, "0");
-}
-
-const ui = {
-  showHud: (on) => {
-    hudEl.classList.toggle("hidden", !on);
-    if (!on) interactPromptEl.classList.add("hidden");
-  },
-  showResult: (won, saved, total, time) => {
-    $("resultBadge").textContent = won ? "Mission complete" : "Time's up";
-    $("resultTitle").textContent = won ? "Everyone is safe!" : "Some were left behind…";
-    $("resultText").textContent = won
-      ? "Our little heroes got everyone out of the flames. Amazing work!"
-      : "You saved " + saved + " of " + total + ". The fire spread too fast this time — try again!";
-    $("resultSaved").textContent = saved + " / " + total;
-    $("resultTime").textContent = fmtTime(time);
-    resultEl.classList.remove("hidden");
-  },
-};
-
-const game = new Game({ scene, camera, world, input, audio, ui });
-totalCountEl.textContent = game.totalCount;
-
-
-
-// --- HUD ---
-function updateHud() {
-  if (game.state !== "playing") return;
-  savedCountEl.textContent = game.savedCount;
-  const left = Math.max(0, LEVEL_TIME - game.time);
-  timerValueEl.textContent = fmtTime(left);
-  timerBoxEl.classList.toggle("low", left < 20);
-  if (game.prompt) {
-    interactPromptEl.textContent = game.prompt;
-    interactPromptEl.classList.remove("hidden");
-  } else {
-    interactPromptEl.classList.add("hidden");
-  }
-  const carrying = game.heroes.some((h) => h.carry);
-  actionBtn.textContent = carrying ? "🏁" : "✋";
-  actionBtn.classList.toggle("grab", !carrying);
-  dangerEl.style.opacity = game.danger.toFixed(3);
-}
+// --- HUD (all DOM logic in systems/hud.js) + game ---
+const hud = createHud();
+const game = new Game({ scene, camera, world, input, audio, ui: hud });
 
 // --- Render loop ---
 let last = performance.now();
@@ -117,16 +69,38 @@ function loop(now) {
   last = now;
   dt = Math.min(dt, 0.05);
   game.update(dt);
-  updateHud();
+  hud.update(game, dt);
   post.composer.render();
 }
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+// --- Viewport sync (mobile-safe) ---
+// Mobile Chrome keeps a "layout viewport" that can be bigger than the area the
+// user actually sees (browser toolbar showing/hiding, pinch zoom, scroll).
+// `position: fixed` elements and window.innerWidth/Height are pinned to the
+// layout viewport, so when the two disagree the joystick / action button float
+// away from the screen edges and the 3D view misaligns with the UI.
+// Fix: track visualViewport (the visible area) and pin canvas + HUD to it.
+function syncViewport() {
+  const vv = window.visualViewport;
+  const w = vv ? vv.width : window.innerWidth;
+  const h = vv ? vv.height : window.innerHeight;
+  const ox = vv ? vv.offsetLeft : 0;
+  const oy = vv ? vv.offsetTop : 0;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  post.resize(window.innerWidth, window.innerHeight);
-});
+  renderer.setSize(w, h);
+  post.resize(w, h);
+  const t = vv && (ox || oy) ? `translate(${ox}px, ${oy}px)` : "";
+  renderer.domElement.style.transform = t;
+  hudEl.style.transform = t;
+}
+window.addEventListener("resize", syncViewport);
+window.addEventListener("orientationchange", syncViewport);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", syncViewport);
+  window.visualViewport.addEventListener("scroll", syncViewport);
+}
+syncViewport();
 
 
 // --- Button wiring ---
@@ -134,16 +108,20 @@ function startGame() {
   audio.init();
   audio.resume();
   audio.startFire(0.25);
+  audio.startSiren();
   titleEl.classList.add("hidden");
   resultEl.classList.add("hidden");
   pauseEl.classList.add("hidden");
-  game.play();
+  game.play(0);
 }
 function toMenu() {
   resultEl.classList.add("hidden");
   pauseEl.classList.add("hidden");
   titleEl.classList.remove("hidden");
-  ui.showHud(false);
+  hud.showHud(false);
+  audio.stopSiren();
+  game.level = 0;
+  game.score.reset();
   game.reset();
   game.state = "title";
 }
@@ -152,7 +130,10 @@ $("startBtn").addEventListener("click", startGame);
 $("againBtn").addEventListener("click", () => {
   resultEl.classList.add("hidden");
   audio.startFire(0.25);
-  game.play();
+  audio.startSiren();
+  // won + more shifts left -> next level; won on last / lost -> (re)start
+  if (game.state === "won" && game.level + 1 < LEVELS.length) game.nextLevel();
+  else game.play(game.state === "lost" ? game.level : 0);
 });
 $("menuBtn").addEventListener("click", toMenu);
 pauseBtn.addEventListener("click", () => {
@@ -174,95 +155,72 @@ muteBtn.addEventListener("click", () => {
   muteBtn.textContent = m ? "🔇" : "🔊";
 });
 
-// --- Title-screen portraits (2D, matching the 3D heroes) ---
-function drawPortrait(cv, kind) {
+// --- Title-screen portrait (2D, matching the 3D firefighter) ---
+function drawFirefighterPortrait(cv) {
   const ctx = cv.getContext("2d");
   const w = cv.width;
   const h = cv.height;
   const cx = w / 2;
   const cy = h / 2;
   ctx.clearRect(0, 0, w, h);
-  // shoulders / uniform
-  ctx.fillStyle = kind === "boy" ? "#17223f" : "#7d7d54";
+  // coat shoulders
+  ctx.fillStyle = "#22305a";
   ctx.beginPath();
   ctx.ellipse(cx, h * 1.05, w * 0.46, h * 0.36, 0, Math.PI, Math.PI * 2);
   ctx.fill();
-  if (kind === "girl") {
-    ctx.fillStyle = "#3d4a2c";
-    for (let i = 0; i < 12; i++) {
-      ctx.beginPath();
-      ctx.ellipse(cx + (Math.random() - 0.5) * w * 0.7, h * 0.93 + Math.random() * h * 0.14, w * 0.05, w * 0.04, 0, 0, 7);
-      ctx.fill();
-    }
-  } else {
-    ctx.strokeStyle = "#c8ff4d";
-    ctx.lineWidth = w * 0.04;
-    ctx.beginPath();
-    ctx.moveTo(cx - w * 0.16, h * 0.74);
-    ctx.lineTo(cx - w * 0.16, h);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx + w * 0.16, h * 0.74);
-    ctx.lineTo(cx + w * 0.16, h);
-    ctx.stroke();
-    ctx.strokeStyle = "#14161c";
-    ctx.lineWidth = w * 0.05;
-    ctx.beginPath();
-    ctx.moveTo(cx - w * 0.2, h * 0.72);
-    ctx.lineTo(cx + w * 0.22, h * 1.02);
-    ctx.stroke();
-  }
+  // reflective band across the shoulders
+  ctx.fillStyle = "#cfd6e4";
+  ctx.fillRect(w * 0.28, h * 0.86, w * 0.44, h * 0.055);
+  ctx.fillStyle = "#dfff5e";
+  ctx.fillRect(w * 0.28, h * 0.877, w * 0.44, h * 0.026);
   // head
   ctx.fillStyle = "#f2c9a0";
   ctx.beginPath();
-  ctx.arc(cx, cy - h * 0.05, w * 0.3, 0, 7);
+  ctx.arc(cx, cy - h * 0.02, w * 0.3, 0, 7);
   ctx.fill();
-  // hair
-  if (kind === "boy") {
-    ctx.fillStyle = "#b08a5c";
+  // helmet dome
+  ctx.fillStyle = "#f5821f";
+  ctx.beginPath();
+  ctx.arc(cx, cy - h * 0.055, w * 0.335, Math.PI * 1.02, Math.PI * 1.98);
+  ctx.fill();
+  // brim
+  ctx.fillStyle = "#c96511";
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + h * 0.075, w * 0.38, h * 0.05, 0, 0, 7);
+  ctx.fill();
+  // front shield
+  ctx.fillStyle = "#d9dfe8";
+  ctx.fillRect(cx - w * 0.09, cy - h * 0.045, w * 0.18, h * 0.085);
+  // eyes
+  ctx.fillStyle = "#fff";
+  for (const sx of [-1, 1]) {
     ctx.beginPath();
-    ctx.arc(cx, cy - h * 0.09, w * 0.3, Math.PI * 1.05, Math.PI * 1.95);
-    ctx.fill();
-  } else {
-    ctx.fillStyle = "#a5673f";
-    ctx.beginPath();
-    ctx.arc(cx, cy - h * 0.09, w * 0.31, Math.PI * 1.0, Math.PI * 2.0);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx + w * 0.31, cy - h * 0.02, w * 0.08, w * 0.17, 0.3, 0, 7);
-    ctx.fill();
-    ctx.fillStyle = "#e9ecf5";
-    ctx.beginPath();
-    ctx.arc(cx + w * 0.2, cy - h * 0.16, w * 0.035, 0, 7);
+    ctx.ellipse(cx + sx * w * 0.11, cy + h * 0.02, w * 0.05, w * 0.06, 0, 0, 7);
     ctx.fill();
   }
-  // eyes
-  ctx.fillStyle = "#2a1c12";
-  ctx.beginPath();
-  ctx.arc(cx - w * 0.11, cy - h * 0.05, w * 0.035, 0, 7);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx + w * 0.11, cy - h * 0.05, w * 0.035, 0, 7);
-  ctx.fill();
+  ctx.fillStyle = "#3a2a1a";
+  for (const sx of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(cx + sx * w * 0.11, cy + h * 0.025, w * 0.026, 0, 7);
+    ctx.fill();
+  }
   // cheeks
   ctx.fillStyle = "rgba(255,140,120,0.5)";
-  ctx.beginPath();
-  ctx.arc(cx - w * 0.17, cy + w * 0.03, w * 0.05, 0, 7);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx + w * 0.17, cy + w * 0.03, w * 0.05, 0, 7);
-  ctx.fill();
+  for (const sx of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(cx + sx * w * 0.18, cy + h * 0.07, w * 0.045, 0, 7);
+    ctx.fill();
+  }
   // smile
   ctx.strokeStyle = "#b5606a";
   ctx.lineWidth = w * 0.02;
   ctx.beginPath();
-  ctx.arc(cx, cy + w * 0.02, w * 0.09, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.arc(cx, cy + h * 0.06, w * 0.09, 0.15 * Math.PI, 0.85 * Math.PI);
   ctx.stroke();
 }
 
 // --- Init ---
-drawPortrait($("portrait-boy"), "boy");
-drawPortrait($("portrait-girl"), "girl");
+drawFirefighterPortrait($("portrait-hero"));
 titleEl.classList.remove("hidden");
 loadingEl.classList.add("hidden");
 requestAnimationFrame(loop);

@@ -49,8 +49,8 @@ body {
 }
 #game canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
+  /* size is driven by renderer.setSize() / visualViewport sync, not CSS */
+  transform-origin: 0 0;
   touch-action: none;
 }
 
@@ -270,7 +270,7 @@ body {
   left: calc(10px + var(--pad));
   right: calc(10px + var(--pad-tr));
   display: flex;
-  align-items: flex-start;
+  align-items: center; /* every card + button shares one centered baseline */
   justify-content: space-between;
   gap: 10px;
   pointer-events: none;
@@ -279,21 +279,32 @@ body {
   background: var(--glass);
   border: 1px solid var(--stroke);
   border-radius: 14px;
-  padding: 8px 14px;
-  min-width: 78px;
+  height: 46px; /* one fixed height for every card — no more ragged tops */
+  padding: 3px 14px;
+  min-width: 0;
+  flex: 0 1 auto; /* can compress on tight screens, never overflow the row */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   text-align: center;
   box-shadow: var(--shadow);
+  overflow: hidden; /* text stats wrap inside their card, never escape it */
 }
 .stat-label {
-  display: block;
-  font-size: 10.5px;
+  font-size: 9.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .stat-value {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 .stat.saved .stat-value b {
   color: var(--safe);
@@ -308,6 +319,60 @@ body {
 .stat.timer.low .stat-value b {
   color: #ff5a48;
 }
+.stat.level .stat-value {
+  color: var(--ember-2);
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+}
+/* health bar */
+.stat.health {
+  width: 148px;
+  flex: 0 0 auto; /* fixed card: the bar can never outgrow it */
+  align-items: stretch; /* label row + bar fill the card width */
+}
+.health-bar {
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--stroke);
+  overflow: hidden;
+}
+.health-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffb257, #38e1a0);
+  transition: width 0.15s linear;
+}
+.health-fill.low {
+  background: linear-gradient(90deg, #ff5a48, #ff8a5a);
+}
+#healthBox.low {
+  border-color: rgba(255, 80, 60, 0.7);
+  animation: pulseRed 0.9s ease-in-out infinite;
+}
+#heartIcon {
+  display: inline-block;
+}
+#heartIcon.beat {
+  animation: heartBeat 0.85s ease-in-out infinite;
+}
+@keyframes heartBeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.4);
+  }
+  45% {
+    transform: scale(1);
+  }
+  60% {
+    transform: scale(1.25);
+  }
+}
 .hud-buttons {
   display: flex;
   gap: 8px;
@@ -317,10 +382,10 @@ body {
   appearance: none;
   cursor: pointer;
   font: inherit;
-  font-size: 18px;
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+  font-size: 17px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   border: 1px solid var(--stroke);
   background: var(--glass);
   color: var(--text);
@@ -465,6 +530,73 @@ body {
   }
 }
 
+/* ---------------- Tablet: compact HUD ---------------- */
+@media (max-width: 700px) {
+  .hud-top {
+    gap: 8px;
+  }
+  .stat {
+    height: 42px;
+    padding: 2px 10px;
+  }
+  .stat-value {
+    font-size: 15px;
+  }
+  .stat.level .stat-value {
+    font-size: 12px;
+  }
+  .stat.health {
+    width: 120px;
+  }
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+}
+
+/* ---------------- Phone: value-only chips ----------------
+   Budget at 360px width: 78 + ~46 + ~48 + ~52 + (40+40+6) + 4×6 ≈ 334px
+   → the whole row fits with room to spare.                      */
+@media (max-width: 520px) {
+  .hud-top {
+    top: calc(8px + var(--pad-top));
+    left: calc(8px + var(--pad));
+    right: calc(8px + var(--pad-tr));
+    gap: 6px;
+  }
+  .stat {
+    height: 40px;
+    padding: 2px 9px;
+    border-radius: 12px;
+  }
+  .stat-label {
+    display: none; /* value-only chips — this is what makes the row fit */
+  }
+  .stat-value {
+    font-size: 15px;
+  }
+  /* Health keeps its heart icon, drops the word */
+  .stat.health {
+    width: 78px;
+  }
+  .stat.health .stat-label {
+    display: block;
+    font-size: 13px;
+  }
+  .stat.health .label-text {
+    display: none;
+  }
+  .stat.level {
+    display: none; /* floor name is announced by the center prompt anyway */
+  }
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+}
+
 /* ---------------- Small screens ---------------- */
 @media (max-width: 430px) {
   .joystick {
@@ -525,3 +657,33 @@ body {
   }
 }
 
+/* ------------------------- ULTRA-DANGER SCREEN --------------------------
+   Game toggles .ultra on the canvas and .on on the heat tint; CSS
+   transitions animate the in/out, so it costs nothing per frame.          */
+#game canvas {
+  transition: filter 0.6s ease;
+}
+#game canvas.ultra {
+  filter: blur(1.5px) saturate(1.15);
+}
+.heat-tint {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(255, 70, 15, 0.3) 100%
+  );
+  transition: opacity 0.8s ease;
+}
+.heat-tint.on {
+  opacity: 1;
+}
+@media (max-width: 430px) {
+  #game canvas.ultra {
+    filter: blur(1px) saturate(1.1);
+  }
+}
