@@ -69,14 +69,35 @@ const hud = createHud();
 const game = new Game({ scene, camera, world, input, audio, ui: hud });
 
 // --- Render loop ---
+// One exception used to kill the whole rAF chain silently (frozen game, no
+// clue why -- invisible on a phone without a dev console). Now the error is
+// shown on screen and the last frame keeps drawing.
 let last = performance.now();
+let crashed = false;
+function showCrash(err) {
+  if (crashed) return;
+  crashed = true;
+  console.error(err);
+  const d = document.createElement("div");
+  d.style.cssText =
+    "position:fixed;left:8px;right:8px;bottom:8px;z-index:99;background:#3a0d0d;" +
+    "color:#ffb4a8;border:1px solid #ff7b6b;padding:10px 14px;border-radius:10px;" +
+    "font:13px/1.45 system-ui,sans-serif;white-space:pre-wrap;max-height:45vh;overflow:auto";
+  d.textContent = "⚠️ Game error:\n" + (err && err.stack ? err.stack : String(err));
+  document.body.appendChild(d);
+}
+window.addEventListener("error", (e) => showCrash(e.error || e.message));
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.05);
-  game.update(dt);
-  hud.update(game, dt);
+  try {
+    game.update(dt);
+    hud.update(game, dt);
+  } catch (err) {
+    showCrash(err);
+  }
   if (post.composer) post.composer.render();
   else renderer.render(scene, camera);
 }

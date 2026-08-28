@@ -516,8 +516,10 @@ export class Game {
     const me = this.heroes[0];
     let near = Infinity;
     let nearBurn = 0;
-    for (const s of this.fires) {
-      if (!s.active) continue;
+    for (const s of this.world.fires) {
+      // scorch fires burn the moment they land; level fires ignite once the
+      // fire level reaches their `at`
+      if (!s.scorch && lvl < s.at) continue;
       const d = Math.hypot(me.x - s.x, me.z - s.z);
       if (d < near) {
         near = d;
