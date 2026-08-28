@@ -2,6 +2,7 @@
 // trees, a fire hydrant, parked cars, benches, hedges, crosswalk, manholes
 // and fake reflective puddles. All props sit OUTSIDE the play bounds.
 import * as THREE from "three";
+import { PERF, IS_MOBILE } from "../config.js";
 
 function stdMat(color, o = {}) {
   return new THREE.MeshStandardMaterial(
@@ -17,6 +18,9 @@ const LAMP_POS = [
   { x: 14, z: 5, lit: true },
 ];
 
+// How many streetlamps get a real point light (the rest glow via emissive).
+let lampLightCount = 0;
+
 function buildLamp(x, z, lit) {
   const g = new THREE.Group();
   const pole = stdMat(0x2b2f3a, { roughness: 0.5, metalness: 0.6 });
@@ -30,8 +34,11 @@ function buildLamp(x, z, lit) {
   );
   head.position.set(x > 0 ? -0.35 : 0.35, 4.62, 0);
   g.add(p, base, head);
-  if (lit) {
-    const l = new THREE.PointLight(0xffd9a0, 9, 20, 2);
+  // Only the FIRST lit lamp gets a real point light on mobile (budget); the
+  // others still glow via their emissive head.
+  const useLight = lit && (!IS_MOBILE || lampLightCount++ < 1);
+  if (useLight) {
+    const l = new THREE.PointLight(0xffd9a0, PERF.streetLightInt, 20, 2);
     l.position.set(x > 0 ? -0.6 : 0.6, 4.5, 0);
     g.add(l);
   }

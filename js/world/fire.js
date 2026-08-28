@@ -1,7 +1,7 @@
 // world/fire.js â€” the volumetric flame shader + Fire class, and the safe
 // exit zone.
 import * as THREE from "three";
-import { EXIT } from "../config.js";
+import { EXIT, PERF } from "../config.js";
 
 /* --------------------------- FLAME (shader) ---------------------------- */
 const FLAME_VERT = `
@@ -19,7 +19,7 @@ const FLAME_FRAG = `
   float noise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
     float a=hash(i),b=hash(i+vec2(1.,0.)),c=hash(i+vec2(0.,1.)),d=hash(i+vec2(1.,1.));
     return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}
-  float fbm(vec2 p){ float v=0.0; float a=0.5; for(int i=0;i<5;i++){ v+=a*noise(p); p=p*2.03+vec2(3.7,1.9); a*=0.5; } return v; }
+  float fbm(vec2 p){ float v=0.0; float a=0.5; for(int i=0;i<${PERF.flameOctaves};i++){ v+=a*noise(p); p=p*2.03+vec2(3.7,1.9); a*=0.5; } return v; }
   void main(){
     vec2 uv = vUv; // vUv.y = 0 at the fuel base, 1 at the tips (fire is a vertical plane)
     float t = uTime * 1.7 + uSeed;
@@ -77,12 +77,14 @@ export class Fire {
     this.group.position.copy(center);
     this.scale = scale;
     this.mats = [];
+    // Crossed shader planes: 3 on desktop, 2 on mobile (fragment budget).
+    const planes = PERF.flamePlanes;
     const planeGeo = new THREE.PlaneGeometry(1.6, 2.2);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < planes; i++) {
       const m = makeFlameMaterial(Math.random() * 10);
       const p = new THREE.Mesh(planeGeo, m);
       p.position.y = 1.0;
-      p.rotation.y = (i / 3) * Math.PI;
+      p.rotation.y = (i / planes) * Math.PI;
       p.scale.setScalar(scale);
       p.renderOrder = 5;
       this.group.add(p);

@@ -193,13 +193,15 @@ export class Game {
         time,
       });
     }
-    this.updateCarried();
+    this.updateCarried(dt);
   }
 
-  // Fireman's carry: the victim lies face-up across the hero's shoulders —
-  // head over the right shoulder (drooping slightly), legs over the left,
-  // face tilted up over the shoulder, arms dangling at the sides.
-  updateCarried() {
+  // Fireman's carry: the victim lies across the hero's shoulders — head over
+  // the right shoulder (drooping), legs over the left, face toward the
+  // direction of travel. The body has WEIGHT: it bounces against the hero's
+  // own step (a little late), drifts around when the hero turns, and the head
+  // and arms sway like a limp passenger instead of being welded to the mesh.
+  updateCarried(dt) {
     for (const v of this.victims) {
       if (!v.carrying) continue;
       const h = v.carrying;
@@ -209,19 +211,52 @@ export class Game {
         v.g.scale.setScalar(0.78);
         v._rescaled = true;
         v.g.rotation.order = "YXZ";
+        v._spring = { y: 1.42, yaw: h.g.rotation.y, step: 0, limp: 0 };
+        v._ph = Math.random() * Math.PI * 2;
       }
-      const ry = h.g.rotation.y;
+      const sp = v._spring;
+
+      // 1) WEIGHT — chase the hero's step bounce with a slight lag, so the
+      //    body lands on the shoulders a frame behind the hero's own bob.
+      const targetY = 1.42 + (h._bobY || 0) * 1.35;
+      sp.y += (targetY - sp.y) * Math.min(1, dt * 9);
+
+      // 2) TURNING — the load lags the hero's heading, so it visibly "drifts"
+      //    around the shoulders when you spin (instead of teleporting).
+      sp.yaw = lerpAngle(sp.yaw, h.g.rotation.y, Math.min(1, dt * 6));
+
+      // 3) STRIDE — a lagged copy of the hero's step phase drives the sway.
+      sp.step += ((h._step || 0) - sp.step) * Math.min(1, dt * 7);
+
+      // 4) LIMP — the head droop + arm drape ease in over ~0.3s on grab
+      //    (no pose snap) and ease back out when the person is set down.
+      sp.limp += ((v.state === "carried" ? 1 : 0) - sp.limp) * Math.min(1, dt * 6);
+      const L = sp.limp;
+
+      // Rest across the shoulders, a touch behind the neck (over the spine).
+      const ry = sp.yaw;
+      const back = 0.07;
       v.g.position.set(
-        h.x,
-        this.heroY + 1.42 + Math.abs(Math.sin(this._t * 6)) * 0.03,
-        h.z
+        h.x - Math.sin(ry) * back,
+        this.heroY + sp.y,
+        h.z - Math.cos(ry) * back
       );
-      // head (+Y) over the hero's right shoulder, drooping a touch
-      v.g.rotation.set(0, ry, -Math.PI / 2 - 0.12);
-      // arms drape down in world space (world-down ≈ local +X in this pose)
-      const t = this._t * 2.5 + h.x * 5;
-      if (v.armR) v.armR.rotation.set(0.3, 0, 1.5 + Math.sin(t) * 0.08);
-      if (v.armL) v.armL.rotation.set(0.3, 0, 1.62 + Math.cos(t) * 0.08);
+      // Head end droops over the right shoulder and dips with each stride;
+      // the small x-tilt rolls the chest with the step (YXZ: z lays the body
+      // sideways first, x then rolls it along its own long axis).
+      const droop = 0.12 + 0.1 * L + Math.max(0, sp.step) * 0.06 * L;
+      v.g.rotation.set(sp.step * 0.06 * L, ry, -Math.PI / 2 - droop);
+
+      // LIMP HEAD — face tips down toward the shoulder (local +X is world-down
+      // in this pose) and rolls gently with the stride + a slow personal wobble.
+      if (v.head) {
+        const wobble = Math.sin(this._t * 1.7 + v._ph) * 0.05 * L;
+        v.head.rotation.set((0.28 + wobble) * L, (0.34 + sp.step * 0.05) * L, sp.step * 0.12 * L);
+      }
+      // DRAPED ARMS — ease from the idle hang into a drape down the hero's
+      // back (world-down ≈ local +X here), swinging with the stride.
+      if (v.armR) v.armR.rotation.set(sp.step * 0.2 * L, 0, (1.45 + sp.step * 0.16) * L);
+      if (v.armL) v.armL.rotation.set(-sp.step * 0.2 * L, 0, (1.62 - sp.step * 0.16) * L);
       if (v.body) {
         v.body.position.set(0, 0, 0);
         v.body.rotation.set(0, 0, 0);
@@ -229,6 +264,14 @@ export class Game {
       v.x = h.x;
       v.z = h.z;
     }
+  }
+
+  // Eases a person's head/arm Euler angles from the captured carried pose
+  // toward the idle pose by factor k — used while stepping down after a carry.
+  _easeLimb(v, p, k) {
+    if (p.head && v.head) v.head.rotation.set(p.head.x * k, p.head.y * k, p.head.z * k);
+    if (p.armL && v.armL) v.armL.rotation.set(p.armL.x * k, p.armL.y * k, p.armL.z * k);
+    if (p.armR && v.armR) v.armR.rotation.set(p.armR.x * k, p.armR.y * k, p.armR.z * k);
   }
 
   tryPickup() {
@@ -241,6 +284,15 @@ export class Game {
         v.state = "standing";
         v.standT = 0;
         v._dropY = v.g.position.y; // they step down from shoulder height
+        // remember the exact carried pose so the stand-down eases from it
+        v._dropPose = {
+          rx: v.g.rotation.x,
+          ry: v.g.rotation.y,
+          rz: v.g.rotation.z,
+          head: v.head ? v.head.rotation.clone() : null,
+          armL: v.armL ? v.armL.rotation.clone() : null,
+          armR: v.armR ? v.armR.rotation.clone() : null,
+        };
         this.audio.grab();
         return;
       }
@@ -271,6 +323,14 @@ export class Game {
     v.state = "saving";
     v.saveT = 0;
     v._saveY = v.g.position.y; // rescued from the shoulders
+    // remember the carried pose so the step-down eases from the real droop
+    v._dropPose = {
+      rx: v.g.rotation.x,
+      rz: v.g.rotation.z,
+      head: v.head ? v.head.rotation.clone() : null,
+      armL: v.armL ? v.armL.rotation.clone() : null,
+      armR: v.armR ? v.armR.rotation.clone() : null,
+    };
     this.savedCount++;
     this.score.addRescue();
     this.audio.save();
@@ -284,11 +344,16 @@ export class Game {
           v.saveT += dt;
           const base = v._rescaled ? 0.78 : 1;
           const floor = (v._saveY || 0) - 1.42; // ground under the shoulders
+          const p = v._dropPose;
+          const pRx = p ? p.rx : 0;
+          const pRz = p ? p.rz : -Math.PI / 2 - 0.12;
           if (v.saveT < 0.3) {
             const s = v.saveT / 0.3;
             const e = s * s * (3 - 2 * s); // step down off the back
-            v.g.rotation.z = (-Math.PI / 2 - 0.12) * (1 - e);
+            v.g.rotation.x = pRx * (1 - e);
+            v.g.rotation.z = pRz * (1 - e);
             v.g.position.y = floor + 1.42 * (1 - e);
+            if (p) this._easeLimb(v, p, 1 - e);
           } else {
             const t2 = v.saveT - 0.3; // rise, spin, fade to safety
             const s = Math.max(0, 1 - t2 / 0.5);
@@ -307,8 +372,13 @@ export class Game {
         const s = Math.min(1, v.standT / 0.25);
         const e = s * s * (3 - 2 * s);
         const floor = (v._dropY || 0) - 1.42;
-        v.g.rotation.z = (-Math.PI / 2 - 0.12) * (1 - e);
+        const p = v._dropPose;
+        const pRx = p ? p.rx : 0;
+        const pRz = p ? p.rz : -Math.PI / 2 - 0.12;
+        v.g.rotation.x = pRx * (1 - e);
+        v.g.rotation.z = pRz * (1 - e);
         v.g.position.y = floor + 1.42 * (1 - e);
+        if (p) this._easeLimb(v, p, 1 - e);
         if (s >= 1) {
           v.g.rotation.set(0, 0, 0);
           v.g.position.y = floor;

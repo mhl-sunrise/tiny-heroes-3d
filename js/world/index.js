@@ -1,7 +1,7 @@
 // world/index.js — assembles every world module into one scene graph and
 // exposes a single update(). Fire spots are rebuilt per level from config.
 import * as THREE from "three";
-import { LEVELS, FLOOR_H } from "../config.js";
+import { LEVELS, FLOOR_H, PERF } from "../config.js";
 import { buildSky, buildMoon, buildClouds, buildSkyline } from "./sky.js";
 import { buildEnvironment, buildWindows, buildDetails } from "./building.js";
 import { buildStreet } from "./street.js";
@@ -30,6 +30,11 @@ export function createWorld(scene) {
   world.add(details);
   const win = buildWindows();
   world.add(win.g);
+  // Window point-light budget — the glass keeps its emissive glow, but on
+  // mobile the extra per-pixel lights are what tank the frame rate.
+  win.lights.forEach((wl, i) => {
+    wl.l.visible = i < PERF.windowLights;
+  });
   const street = buildStreet();
   world.add(street.g);
 
@@ -60,8 +65,17 @@ export function createWorld(scene) {
     floorY = floor * FLOOR_H;
     for (const f of fires) world.remove(f.group);
     if (embers) world.remove(embers.points);
+    // Point-light budget: only the first few (earliest-igniting) fires carry
+    // a real light; the rest burn as emissive-only shader planes.
+    let lightBudget = PERF.fireLights;
     fires = cfg.spots.map((s) => {
       const fire = new Fire(new THREE.Vector3(s.x, floorY, s.z), s.scale);
+      if (lightBudget > 0) {
+        fire.light.visible = true;
+        if (lightBudget !== Infinity) lightBudget--;
+      } else {
+        fire.light.visible = false;
+      }
       world.add(fire.group);
       return { x: s.x, z: s.z, at: s.at, scale: s.scale, fire };
     });
@@ -98,7 +112,8 @@ export function createWorld(scene) {
       }
     }
     const fire = new Fire(new THREE.Vector3(x, floorY, z), 0.65);
-    fire.lightMul = 0.35;
+    // scorch fires dim their light (point-light budget); on mobile it's off
+    fire.lightMul = 0.35 * PERF.scorchLightMul;
     fire.intensity = 1; // burning the moment it lands
     world.add(fire.group);
     fires.push({ x, z, at: 0, scale: 0.65, fire, scorch: true });

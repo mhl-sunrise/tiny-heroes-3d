@@ -68,14 +68,23 @@ export function createHud() {
 
   let flashT = 0;
   let lastHurt = 0;
+  // Dirty-check cache: writing the same textContent every frame forces style/
+  // layout work on phones — only touch the DOM when a value actually changes.
+  const _txt = {};
+  function setTxt(el, key, val) {
+    if (_txt[key] !== val) {
+      _txt[key] = val;
+      el.textContent = val;
+    }
+  }
 
   function update(game, dt) {
     if (game.state === "title") return;
-    savedEl.textContent = String(game.savedCount);
-    totalEl.textContent = String(game.totalCount);
-    scoreEl.textContent = String(game.score.score);
-    levelEl.textContent = "F" + (game.levelCfg().floor + 1) + " · " + game.levelName;
-    timerEl.textContent = fmtTime(game.timeLeft);
+    setTxt(savedEl, "saved", String(game.savedCount));
+    setTxt(totalEl, "total", String(game.totalCount));
+    setTxt(scoreEl, "score", String(game.score.score));
+    setTxt(levelEl, "level", "F" + (game.levelCfg().floor + 1) + " · " + game.levelName);
+    setTxt(timerEl, "timer", fmtTime(game.timeLeft));
 
     // health bar
     const hp = game.health;
@@ -90,16 +99,12 @@ export function createHud() {
 
     // action button: grab vs. let go
     const carrying = game.heroes.some((h) => h.carry);
-    actionBtn.textContent = carrying ? "🏁" : "✋";
+    setTxt(actionBtn, "action", carrying ? "🏁" : "✋");
     actionBtn.classList.toggle("grab", !carrying);
 
     // interact prompt
-    if (game.prompt) {
-      promptEl.textContent = game.prompt;
-      promptEl.classList.remove("hidden");
-    } else {
-      promptEl.classList.add("hidden");
-    }
+    setTxt(promptEl, "prompt", game.prompt || "");
+    promptEl.classList.toggle("hidden", !game.prompt);
 
     // damage flash decays; danger vignette tracks proximity + low hp
     flashT = Math.max(0, flashT - dt * 2.2);

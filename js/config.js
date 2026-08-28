@@ -135,3 +135,30 @@ export const ULTRA = {
   exit: 0.7, // hysteresis: only leave below this
   microShake: 0.05,
 };
+
+/* ------------------------------ performance ----------------------------- */
+// Mobile GPUs cannot run this point-light-heavy night scene at desktop cost.
+// One profile per device class so balancing happens in a single place.
+export const IS_MOBILE =
+  (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches) ||
+  (typeof navigator !== "undefined" &&
+    navigator.maxTouchPoints > 1 &&
+    Math.min(screen.width, screen.height) < 820);
+
+export const PERF = {
+  // Renderer: phones render far more CSS pixels per inch — cap the ratio.
+  pixelRatioCap: IS_MOBILE ? 1.5 : 2,
+  // Post chain (bloom = 4+ fullscreen passes) is skipped on mobile; the scene
+  // renders straight to the MSAA canvas instead (antialias then pays off).
+  postFX: !IS_MOBILE,
+  // Point-light budget: every light is evaluated per-pixel in every PBR
+  // material. Desktop can take them all; phones keep only the nearest fires
+  // lit (unlit flames still glow via their emissive shader planes).
+  fireLights: IS_MOBILE ? 3 : Infinity,
+  scorchLightMul: IS_MOBILE ? 0 : 1, // scorch fires keep flames, lose their light
+  windowLights: IS_MOBILE ? 0 : 2, // windows keep glowing, lose their lights
+  streetLightInt: IS_MOBILE ? 3.5 : 9,
+  // Flame shader: fewer crossed planes + fewer noise octaves per fragment.
+  flamePlanes: IS_MOBILE ? 2 : 3,
+  flameOctaves: IS_MOBILE ? 3 : 5,
+};

@@ -2,7 +2,7 @@
 // game, and all UI wiring + the render loop.
 import * as THREE from "three";
 import { Game } from "./game.js";
-import { LEVELS } from "./config.js";
+import { LEVELS, PERF } from "./config.js";
 import { Input } from "./input.js";
 import { createPost } from "./effects.js";
 import { createWorld } from "./world/index.js";
@@ -24,8 +24,11 @@ const muteBtn = $("muteBtn");
 const pauseBtn = $("pauseBtn");
 
 // --- Renderer ---
+// `antialias` is kept on always: desktop draws through the composer, but on
+// mobile we render straight to the canvas, where hardware MSAA is cheap and
+// makes the capped pixel ratio look clean.
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF.pixelRatioCap));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.4;
@@ -53,7 +56,11 @@ scene.add(fill);
 
 // --- World + post + input + audio ---
 const world = createWorld(scene);
-const post = createPost(renderer, scene, camera);
+// Mobile: no bloom chain — render directly (tone mapping is applied by the
+// renderer itself, so the look stays consistent with the desktop passes).
+const post = PERF.postFX
+  ? createPost(renderer, scene, camera)
+  : { composer: null, resize() {} };
 const input = new Input({ joystickEl, knobEl, actionEl: actionBtn });
 const audio = new AudioBus();
 
@@ -70,7 +77,8 @@ function loop(now) {
   dt = Math.min(dt, 0.05);
   game.update(dt);
   hud.update(game, dt);
-  post.composer.render();
+  if (post.composer) post.composer.render();
+  else renderer.render(scene, camera);
 }
 
 // --- Viewport sync (mobile-safe) ---

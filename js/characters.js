@@ -199,15 +199,19 @@ function makeKidUpdate(k) {
     const idle = 1 - k._amp;
 
     if (state.dragging) {
-      // Fireman's carry: shoulders under the load, arms up and back to
-      // cradle the person on the back, steady heavy strides.
-      k.armL.rotation.x = 2.2;
-      k.armR.rotation.x = 2.2;
-      k.armL.rotation.z = 0.3;
-      k.armR.rotation.z = -0.3;
-      k.legL.rotation.x = s * 0.6;
-      k.legR.rotation.x = -s * 0.6;
-      k.torso.rotation.x = 0.18;
+      // Fireman's carry: the victim rests across the shoulders, so both hands
+      // come up from IN FRONT and tuck under the load — right hand under the
+      // drooping head, left hand under the knees — like actually supporting
+      // someone. Arms pump gently with the stride; torso leans into the weight.
+      k.armR.rotation.x = -2.1 + s * 0.07;
+      k.armR.rotation.y = 0.55;
+      k.armR.rotation.z = -0.15;
+      k.armL.rotation.x = -1.6 + s * 0.07;
+      k.armL.rotation.y = -0.55;
+      k.armL.rotation.z = 0.15;
+      k.legL.rotation.x = s * 0.45;
+      k.legR.rotation.x = -s * 0.45;
+      k.torso.rotation.x = 0.2;
     } else if (carrying) {
       k.armL.rotation.x = -0.75;
       k.armR.rotation.x = -0.75;
@@ -219,6 +223,9 @@ function makeKidUpdate(k) {
     } else {
       k.armL.rotation.x = s * amp;
       k.armR.rotation.x = -s * amp;
+      // clear any twist left over from the carry pose
+      k.armL.rotation.y = 0;
+      k.armR.rotation.y = 0;
       k.armL.rotation.z = 0.05 + Math.sin(t * 1.5) * 0.05 * idle;
       k.armR.rotation.z = -0.05 - Math.sin(t * 1.5) * 0.05 * idle;
       k.legL.rotation.x = -s * amp * 0.95;
@@ -231,6 +238,12 @@ function makeKidUpdate(k) {
       Math.abs(Math.sin(phase)) * 0.02 * k._amp + Math.sin(t * 2) * 0.008 * idle;
     k.head.rotation.x = Math.sin(t * 1.3) * 0.03 + (moving ? -0.05 : 0);
     k.head.rotation.y = Math.sin(t * 0.9) * 0.05;
+
+    // Exposed for the carry: the combined body bounce and the stride phase.
+    // A carried person springs against exactly these, so they stay in step
+    // with the hero instead of floating on their own clock.
+    k._bobY = k.body.position.y + (k.torso.position.y - 0.84);
+    k._step = s * k._amp;
   };
 }
 // Fake contact shadow (cheap, looks great over a dark floor).
@@ -642,5 +655,5 @@ export function createVictim(opts = {}) {
     body.rotation.z = Math.sin(t * 24) * 0.01;
     halo.material.opacity = 0.55 + Math.sin(t * 4) * 0.2;
   }
-  return { g, update, halo, mark, armR, armL, body };
+  return { g, update, halo, mark, armR, armL, body, head };
 }
