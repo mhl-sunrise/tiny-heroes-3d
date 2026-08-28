@@ -140,41 +140,6 @@ class AudioBus {
     notes.forEach((n, i) => setTimeout(() => this.blip(n, 0.18, "triangle", 0.5), i * 110));
   }
 
-  // Continuous fire-truck siren (slow warble), quiet in the background.
-  startSiren() {
-    if (!this._ready || this._siren) return;
-    const ctx = this.ctx;
-    const o = ctx.createOscillator();
-    o.type = "triangle";
-    o.frequency.value = 620;
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 1.1;
-    const lg = ctx.createGain();
-    lg.gain.value = 240;
-    lfo.connect(lg).connect(o.frequency);
-    const g = ctx.createGain();
-    g.gain.value = 0.035;
-    o.connect(g).connect(this.master);
-    o.start();
-    lfo.start();
-    this._siren = { o, lfo, g };
-  }
-  stopSiren() {
-    if (!this._siren) return;
-    const { o, lfo, g } = this._siren;
-    const t = this.ctx.currentTime;
-    g.gain.setTargetAtTime(0, t, 0.15);
-    setTimeout(() => {
-      try {
-        o.stop();
-        lfo.stop();
-      } catch (e) {
-        /* already stopped */
-      }
-    }, 500);
-    this._siren = null;
-  }
-
   // --- Tension: falling debris + ultra danger
   whoosh() {
     // debris cutting the air overhead

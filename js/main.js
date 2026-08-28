@@ -116,7 +116,6 @@ function startGame() {
   audio.init();
   audio.resume();
   audio.startFire(0.25);
-  audio.startSiren();
   titleEl.classList.add("hidden");
   resultEl.classList.add("hidden");
   pauseEl.classList.add("hidden");
@@ -127,7 +126,6 @@ function toMenu() {
   pauseEl.classList.add("hidden");
   titleEl.classList.remove("hidden");
   hud.showHud(false);
-  audio.stopSiren();
   game.level = 0;
   game.score.reset();
   game.reset();
@@ -138,7 +136,6 @@ $("startBtn").addEventListener("click", startGame);
 $("againBtn").addEventListener("click", () => {
   resultEl.classList.add("hidden");
   audio.startFire(0.25);
-  audio.startSiren();
   // won + more shifts left -> next level; won on last / lost -> (re)start
   if (game.state === "won" && game.level + 1 < LEVELS.length) game.nextLevel();
   else game.play(game.state === "lost" ? game.level : 0);
