@@ -465,7 +465,22 @@ export class Game {
     this.world.update(dt, this.time, lvl);
     if (this.scene.fog) this.scene.fog.density = (0.003 + lvl * 0.018) * cfg.fog;
     this.danger = clamp((lvl - 0.35) / 0.65, 0, 1);
-    this.audio.setFireIntensity(0.25 + lvl * 0.75);
+    // Fire audio: ambient roar grows with fire level, plus a proximity boost
+    // from the NEAREST burning spot — a murmur across the room, a roar when
+    // you stand right next to a flame.
+    const h = this.heroes[0];
+    let near = Infinity;
+    let nearBurn = 0;
+    for (const s of this.fires) {
+      if (!s.active) continue;
+      const d = Math.hypot(h.x - s.x, h.z - s.z);
+      if (d < near) {
+        near = d;
+        nearBurn = s.fire.intensity;
+      }
+    }
+    const prox = clamp(1 - (near - 1.6) / 5, 0, 1); // 1 at 1.6m → 0 at 6.6m
+    this.audio.setFireIntensity(clamp(0.2 + lvl * 0.45 + prox * nearBurn * 0.85, 0, 1));
 
     // health: fire proximity + ambient smoke vs. safe-zone healing
     const h = this.heroes[0];
@@ -542,7 +557,10 @@ export class Game {
     }
 
     this.debris.update(dt, {
-      onDrop: () => this.audio.whoosh(),
+      onDrop: () => {
+        this.audio.whoosh();
+        this.shake = Math.max(this.shake, 0.12); // jolt as a chunk breaks loose
+      },
       onImpact: (x, z) => this.onDebrisImpact(x, z),
     });
 
@@ -568,9 +586,11 @@ export class Game {
   onDebrisImpact(x, z) {
     const h = this.heroes[0];
     const d = Math.hypot(h.x - x, h.z - z);
-    // every impact is a real bang: hard shake, boom, and the spot keeps burning
-    this.shake = Math.min(1.0, this.shake + 0.4 + 0.45 * Math.max(0, 1 - d / 8));
-    this.audio.boom();
+    // every impact is a real bang: hard shake, loud boom (louder up close),
+    // and the spot keeps burning
+    const closeness = Math.max(0, 1 - d / 8);
+    this.shake = Math.min(1.0, this.shake + 0.55 + 0.45 * closeness);
+    this.audio.boom(clamp(0.35 + 0.65 * closeness, 0, 1));
     this.world.spawnScorch(x, z);
     if (d < DEBRIS.hitR) {
       this.health.damage(DEBRIS.damage);

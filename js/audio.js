@@ -82,7 +82,8 @@ class AudioBus {
 
   setFireIntensity(intensity) {
     if (!this.fireGain) return;
-    const target = Math.max(0, Math.min(1, intensity)) * 0.12;
+    // 0.3 peak: a far fire stays a murmur, a fire right next to you is a roar
+    const target = Math.max(0, Math.min(1, intensity)) * 0.3;
     this.fireGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.6);
   }
 
@@ -146,11 +147,34 @@ class AudioBus {
     this.blip(900, 0.09, "sawtooth", 0.1);
     setTimeout(() => this.blip(500, 0.12, "sawtooth", 0.08), 60);
   }
-  boom() {
-    // debris impact: a real bang — deep thump, crack, ring
-    this.blip(55, 0.35, "sine", 0.7);
-    this.blip(110, 0.2, "triangle", 0.4);
-    this.blip(420, 0.07, "sawtooth", 0.22);
+  boom(vol = 1) {
+    // debris impact: a real bang — sub thump, noise smash, ring.
+    // vol is scaled by distance to the hero (near = violent, far = muffled).
+    this.blip(50, 0.4, "sine", 0.8 * vol);
+    this.blip(95, 0.25, "triangle", 0.5 * vol);
+    this._noiseBurst(0.22, 900, 0.75 * vol);
+    this.blip(420, 0.06, "sawtooth", 0.25 * vol);
+  }
+  // Short decaying noise burst — the "smash" part of a heavy impact.
+  _noiseBurst(dur, freq, vol) {
+    if (!this._ready) return;
+    const ctx = this.ctx;
+    const n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      const env = 1 - i / n;
+      d[i] = (Math.random() * 2 - 1) * env * env;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    src.connect(f).connect(g).connect(this.master);
+    src.start();
   }
   thud() {
     this.blip(70, 0.22, "sine", 0.5);
