@@ -20,7 +20,14 @@ class AudioBus {
       this.ctx = new AC();
       this.master = this.ctx.createGain();
       this.master.gain.value = this.muted ? 0 : 0.9;
-      this.master.connect(this.ctx.destination);
+      // soft-clip guard: big booms + the fire roar must not distort harshly
+      const comp = this.ctx.createDynamicsCompressor();
+      comp.threshold.value = -14;
+      comp.knee.value = 18;
+      comp.ratio.value = 6;
+      comp.attack.value = 0.004;
+      comp.release.value = 0.18;
+      this.master.connect(comp).connect(this.ctx.destination);
       this._ready = true;
     } catch (e) {
       this._ready = false;
@@ -147,16 +154,42 @@ class AudioBus {
     this.blip(900, 0.09, "sawtooth", 0.1);
     setTimeout(() => this.blip(500, 0.12, "sawtooth", 0.08), 60);
   }
+  // A chunk tearing loose from the ceiling, right as the fall begins.
+  crack() {
+    this.blip(170, 0.07, "square", 0.3);
+    this._noiseBurst(0.09, 1400, 0.4, "bandpass"); // dry snap of breaking plaster
+    setTimeout(() => this.blip(85, 0.16, "sawtooth", 0.25), 60); // low groan after
+  }
   boom(vol = 1) {
-    // debris impact: a real bang — sub thump, noise smash, ring.
-    // vol is scaled by distance to the hero (near = violent, far = muffled).
-    this.blip(50, 0.4, "sine", 0.8 * vol);
-    this.blip(95, 0.25, "triangle", 0.5 * vol);
-    this._noiseBurst(0.22, 900, 0.75 * vol);
-    this.blip(420, 0.06, "sawtooth", 0.25 * vol);
+    // debris impact: a real EXPLOSION — chest-thumping sub drop, a sharp
+    // crack at the moment of contact, a muffled smash, then a rolling
+    // building-shake tail. vol is distance-scaled (near = violent).
+    this._sweep(130, 32, 0.5, "sine", 0.95 * vol); // the "BWOOOM"
+    this.blip(70, 0.3, "triangle", 0.6 * vol);
+    this._noiseBurst(0.06, 3500, 0.9 * vol, "highpass"); // sharp contact crack
+    this._noiseBurst(0.3, 750, 0.85 * vol, "lowpass"); // the heavy smash
+    this._noiseBurst(0.55, 220, 0.4 * vol, "lowpass"); // rolling tail
+    this.blip(420, 0.05, "sawtooth", 0.2 * vol);
+  }
+  // Oscillator with a pitch sweep — the sub drop of a boom.
+  _sweep(f0, f1, dur, type, vol) {
+    if (!this._ready) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + dur + 0.02);
   }
   // Short decaying noise burst — the "smash" part of a heavy impact.
-  _noiseBurst(dur, freq, vol) {
+  _noiseBurst(dur, freq, vol, type = "lowpass") {
     if (!this._ready) return;
     const ctx = this.ctx;
     const n = Math.floor(ctx.sampleRate * dur);
@@ -169,7 +202,7 @@ class AudioBus {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const f = ctx.createBiquadFilter();
-    f.type = "lowpass";
+    f.type = type;
     f.frequency.value = freq;
     const g = ctx.createGain();
     g.gain.value = vol;

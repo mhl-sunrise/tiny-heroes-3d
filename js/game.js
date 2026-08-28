@@ -579,6 +579,7 @@ export class Game {
 
     this.debris.update(dt, {
       onDrop: () => {
+        this.audio.crack(); // the chunk tears loose
         this.audio.whoosh();
         this.shake = Math.max(this.shake, 0.12); // jolt as a chunk breaks loose
       },
@@ -607,11 +608,11 @@ export class Game {
   onDebrisImpact(x, z) {
     const h = this.heroes[0];
     const d = Math.hypot(h.x - x, h.z - z);
-    // every impact is a real bang: hard shake, loud boom (louder up close),
-    // and the spot keeps burning
+    // every impact is a real bang: hard shake, LOUD boom (deafening up close,
+    // still clearly explosive far away), and the spot keeps burning
     const closeness = Math.max(0, 1 - d / 8);
     this.shake = Math.min(1.0, this.shake + 0.55 + 0.45 * closeness);
-    this.audio.boom(clamp(0.35 + 0.65 * closeness, 0, 1));
+    this.audio.boom(clamp(0.6 + 0.4 * closeness, 0, 1));
     this.world.spawnScorch(x, z);
     if (d < DEBRIS.hitR) {
       this.health.damage(DEBRIS.damage);
