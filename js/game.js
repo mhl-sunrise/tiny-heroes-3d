@@ -3,10 +3,9 @@
 // systems, the multistory floor system and the three-shift level flow.
 import * as THREE from "three";
 import { createFirefighter, createVictim } from "./characters.js";
-import { BOUNDS, EXIT, LEVELS, HERO, FLOOR_H, FLOOR_NAMES, DEBRIS, SPARKS, ULTRA } from "./config.js";
+import { BOUNDS, EXIT, LEVELS, HERO, FLOOR_H, FLOOR_NAMES, DEBRIS, ULTRA } from "./config.js";
 import { HealthSystem, ScoreSystem } from "./systems/health.js";
 import { buildDebris } from "./world/debris.js";
-import { buildSparks } from "./world/sparks.js";
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -50,11 +49,9 @@ export class Game {
     this.heroes = [];
     this.victims = [];
 
-    // tension layer: falling debris + foreground sparks
+    // tension layer: falling debris
     this.debris = buildDebris();
     this.scene.add(this.debris.group);
-    this.sparks = buildSparks();
-    this.scene.add(this.sparks.group);
     this.shake = 0;
     this.ultra = false;
     this._debrisT = 4;
@@ -113,7 +110,6 @@ export class Game {
     this.totalCount = this.victims.length;
     // reset the tension layer for the new shift
     this.debris.setFloor(this.floorY);
-    this.sparks.reset();
     this.shake = 0;
     this.ultra = false;
     this.ui.setUltra(false);
@@ -585,13 +581,6 @@ export class Game {
     }
   }
 
-  updateSparks(dt) {
-    let rate = lerp(SPARKS.rateBase, SPARKS.rateLate, this._lastLvl);
-    if (this.ultra) rate *= SPARKS.rateUltraMul;
-    this.sparks.setRate(rate);
-    this.sparks.update(dt, this.camera);
-  }
-
   finish(won, reason = "time") {
     if (this.state !== "playing") return;
     this.state = won ? "won" : "lost";
@@ -634,7 +623,6 @@ export class Game {
       a.legL.rotation.x = 0.9 * Math.sin(t);
       a.legR.rotation.x = 0.9 * Math.cos(t);
       this.world.update(dt, this._t, this._lastLvl);
-      this.sparks.update(dt, this.camera);
       this.prompt = "🪜  Climbing to the " + FLOOR_NAMES[this.level] + "…";
       this.updateCamera(dt);
       if (p >= 1) {
@@ -650,7 +638,6 @@ export class Game {
       this._t += dt * 0.5;
       this.world.update(dt, this._t, lvl);
       this.debris.update(dt, null); // let any in-flight chunks land silently
-      this.sparks.update(dt, this.camera);
       for (const k of this.heroes)
         k.update(dt, { moving: false, moveSpeed: 0, carrying: k.carry, time: this._t });
       this.updateVictims(dt);
@@ -664,7 +651,6 @@ export class Game {
     if (this._bannerT > 0) this._bannerT -= dt;
     this.updateFire(dt);
     this.updateDebris(dt);
-    this.updateSparks(dt);
 
     const mv = this.input.update().move;
     this.updateHeroes(dt, mv, this.time);

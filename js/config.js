@@ -108,7 +108,7 @@ export const HERO = {
   interactRadius: 1.3,
 };
 
-// Tension: falling debris + foreground sparks + "ultra danger" screen state.
+// Tension: falling debris + "ultra danger" screen state.
 export const DEBRIS = {
   damage: 15, // HP lost when a chunk lands on you
   hitR: 0.95, // inside this radius at impact = hit
@@ -121,13 +121,6 @@ export const DEBRIS = {
   burstCount: [2, 3],
   rumbleTime: 1.4,
   closeScore: 5,
-};
-
-export const SPARKS = {
-  count: 24,
-  rateBase: 0.3, // foreground sparks per second at shift start
-  rateLate: 2.2, // ...per second late in the shift
-  rateUltraMul: 2, // multiplier while in the ultra-danger state
 };
 
 export const ULTRA = {
