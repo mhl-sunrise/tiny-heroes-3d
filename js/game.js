@@ -587,6 +587,7 @@ export class Game {
     if (this.state !== "playing") return;
     this.state = won ? "won" : "lost";
     this.ui.showHud(false);
+    this.audio.stopMusic(); // fade the loop out so the fanfare reads clearly
     this.audio.heartbeat(false);
     if (won) {
       this.score.addClearBonus(this.time, this.levelCfg().time, this.health.hp);

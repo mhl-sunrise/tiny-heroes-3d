@@ -1,5 +1,6 @@
-// audio.js — fully procedural sound (no external files) using the WebAudio API.
-// Keeps the game self-contained and small.
+// audio.js — sound built on the WebAudio API: real looped recordings for the
+// fire ambience + debris crash, everything else (SFX and the action music
+// loop) is synthesized procedurally, so the game stays small.
 
 class AudioBus {
   constructor() {
@@ -8,6 +9,7 @@ class AudioBus {
     this.muted = false;
     this.fireGain = null;
     this.fireStarted = false;
+    this.musicOn = false;
     this._boomBuf = null; // decoded "collapsing structure" one-shot (polyphonic)
     this._ready = false;
   }
@@ -330,6 +332,166 @@ class AudioBus {
   lose() {
     const notes = [440, 349.23, 261.63, 196];
     notes.forEach((n, i) => setTimeout(() => this.blip(n, 0.4, "sine", 0.5), i * 180));
+  }
+
+  // --- Action music: a small procedural loop that plays under gameplay ---
+  // A look-ahead scheduler (setInterval + WebAudio clock) keeps the groove
+  // tight even when the render loop stutters. Everything runs through
+  // _musicGain into master, so the mute button and the soft-clip compressor
+  // handle it automatically. Call startMusic() from a user gesture.
+  startMusic() {
+    if (!this._ready || this.musicOn) return;
+    this.musicOn = true;
+    const ctx = this.ctx;
+    this._musicGain = ctx.createGain();
+    this._musicGain.gain.value = 0.0001;
+    this._musicGain.gain.setTargetAtTime(0.3, ctx.currentTime, 0.4); // gentle fade-in
+    this._musicGain.connect(this.master);
+    this._beat = 60 / 118; // 118 BPM — urgent but not frantic
+    this._mStep = 0; // sixteenth-note position inside the 4-bar (64-step) loop
+    this._mNext = ctx.currentTime + 0.15;
+    this._musicTimer = setInterval(() => this._musicTick(), 40);
+    this._musicTick();
+  }
+
+  stopMusic() {
+    if (!this.musicOn) return;
+    this.musicOn = false;
+    clearInterval(this._musicTimer);
+    const g = this._musicGain;
+    if (g) {
+      g.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.12); // quick fade-out
+      setTimeout(() => g.disconnect(), 800);
+    }
+  }
+
+  _musicTick() {
+    if (!this.musicOn) return;
+    const ahead = this.ctx.currentTime + 0.15; // ~4 steps of lookahead
+    while (this._mNext < ahead) {
+      this._playMusicStep(this._mStep, this._mNext);
+      this._mNext += this._beat / 4;
+      this._mStep = (this._mStep + 1) % 64;
+    }
+  }
+
+  _mn(m) {
+    return 440 * Math.pow(2, (m - 69) / 12); // midi number -> frequency
+  }
+
+  _playMusicStep(step, t) {
+    const bar = Math.floor(step / 16);
+    const p = step % 16;
+    // Am - F - C - G: the classic "heroic" action progression
+    const roots = [45, 41, 48, 43]; // A2, F2, C3, G2 (midi)
+    const pads = [
+      [57, 60, 64], // Am
+      [53, 57, 60], // F
+      [60, 64, 67], // C
+      [55, 59, 62], // G
+    ];
+    const root = roots[bar];
+    // four-on-the-floor kick + a pickup into the loop's head
+    if (p === 0 || p === 4 || p === 8 || p === 12 || (bar === 3 && p === 15)) this._mkick(t);
+    // snare on the backbeat
+    if (p === 4 || p === 12) this._msnare(t);
+    // off-beat hi-hats keep the shuffle
+    if (p % 4 === 2) this._mhat(t);
+    // eighth-note bassline: root-root-fifth-root ...
+    if (p % 2 === 0) {
+      const e = p / 2;
+      this._mbass(t, this._mn(e === 2 || e === 6 ? root + 7 : root));
+    }
+    // soft pad chord at the top of each bar
+    if (p === 0) pads[bar].forEach((m) => this._mpad(t, this._mn(m)));
+    // tiny siren motif on the last two bars (fire-truck "wee-oo", chord tones)
+    if (bar === 2 && p === 0) this._mlead(t, this._mn(76)); // E5
+    if (bar === 2 && p === 3) this._mlead(t, this._mn(79)); // G5
+    if (bar === 3 && p === 0) this._mlead(t, this._mn(71)); // B4
+    if (bar === 3 && p === 3) this._mlead(t, this._mn(74)); // D5
+  }
+
+  // --- music instruments (all short-lived, into _musicGain) ---
+  _mkick(t) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.1); // chest thump
+    g.gain.setValueAtTime(0.55, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g).connect(this._musicGain);
+    o.start(t);
+    o.stop(t + 0.2);
+  }
+  _msnare(t) {
+    this._mburst(t, 0.12, 1800, "bandpass", 0.32, 0.004);
+  }
+  _mhat(t) {
+    this._mburst(t, 0.04, 8000, "highpass", 0.07, 0.002);
+  }
+  _mbass(t, f) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.value = f;
+    const fl = ctx.createBiquadFilter();
+    fl.type = "lowpass";
+    fl.frequency.value = 420;
+    fl.Q.value = 1;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.38, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); // short 8th-note feel
+    o.connect(fl).connect(g).connect(this._musicGain);
+    o.start(t);
+    o.stop(t + 0.25);
+  }
+  _mpad(t, f) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = f;
+    const g = ctx.createGain();
+    const dur = this._beat * 1.6;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.11, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this._musicGain);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+  _mlead(t, f) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.type = "square";
+    o.frequency.value = f;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.13, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    o.connect(g).connect(this._musicGain);
+    o.start(t);
+    o.stop(t + 0.15);
+  }
+  // Reusable short decaying noise hit (snare / hat).
+  _mburst(t, dur, freq, type, vol, attack) {
+    const ctx = this.ctx;
+    const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = ctx.createBufferSource();
+    s.buffer = buf;
+    const fl = ctx.createBiquadFilter();
+    fl.type = type;
+    fl.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(fl).connect(g).connect(this._musicGain);
+    s.start(t);
+    s.stop(t + dur);
   }
 }
 
