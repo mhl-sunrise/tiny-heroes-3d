@@ -256,7 +256,7 @@ export class Game {
       }
       v.g.position.set(v.x, this.heroY, v.z);
       v.update(this._t, {
-        walkDt: d > 0.3 ? dt : 0, // walk cycle while actually moving
+        walkDt: d > 0.05 ? dt : 0, // legs swing on every frame they actually step
         waving: true, // a freed kid happily waves along
       });
     }
