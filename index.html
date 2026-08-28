@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0b1020" />
+  <link
+    rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚒</text></svg>"
+  />
+  <title>Little Firefighters</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- 3D canvas mount point -->
+  <div id="game"></div>
+
+  <!-- ============ LOADING ============ -->
+  <div id="loading" class="overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Igniting the scene…</div>
+  </div>
+
+  <!-- ============ TITLE ============ -->
+  <div id="title" class="overlay hidden">
+    <div class="title-card">
+      <div class="badge">A little rescue mission</div>
+      <h1>Little&nbsp;Firefighters</h1>
+      <p class="subtitle">
+        A fire is spreading through the building. Guide our two heroes
+        through the smoke, reach the trapped people and carry them
+        to safety — before it's too late.
+      </p>
+
+      <div class="heroes">
+        <div class="hero-chip">
+          <canvas id="portrait-boy" width="120" height="120"></canvas>
+          <div class="hero-meta">
+            <strong>Firefighter</strong>
+            <span>Brave &amp; quick</span>
+          </div>
+        </div>
+        <div class="hero-chip">
+          <canvas id="portrait-girl" width="120" height="120"></canvas>
+          <div class="hero-meta">
+            <strong>Rescuer</strong>
+            <span>Steady &amp; kind</span>
+          </div>
+        </div>
+      </div>
+
+      <button id="startBtn" class="big-btn">▶&nbsp; Start Rescue</button>
+
+      <div class="controls-hint">
+        <span class="chip">🕹️ Drag left side to move</span>
+        <span class="chip">✋ Tap right to grab / drop</span>
+        <span class="chip">🔭 Drag the scene to look around</span>
+      </div>
+      <div class="desktop-hint">
+        Desktop: <b>WASD / Arrows</b> move · <b>E</b> grab · <b>Drag</b> to look
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HUD ============ -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="stat saved">
+        <span class="stat-label">Saved</span>
+        <span class="stat-value"><b id="savedCount">0</b> / <span id="totalCount">0</span></span>
+      </div>
+      <div class="stat timer" id="timerBox">
+        <span class="stat-label">Time</span>
+        <span class="stat-value"><b id="timerValue">0:00</b></span>
+      </div>
+      <div class="hud-buttons">
+        <button id="muteBtn" class="icon-btn" title="Sound">🔊</button>
+        <button id="pauseBtn" class="icon-btn" title="Pause">⏸</button>
+      </div>
+    </div>
+
+    <!-- Joystick (left) -->
+    <div id="joystick" class="joystick">
+      <div id="joyKnob" class="joy-knob"></div>
+    </div>
+
+    <!-- Action button (right) -->
+    <button id="actionBtn" class="action-btn">✋</button>
+
+    <!-- Interact prompt -->
+    <div id="interactPrompt" class="interact-prompt hidden"></div>
+
+    <!-- Danger vignette -->
+    <div id="dangerVignette" class="danger-vignette"></div>
+  </div>
+
+  <!-- ============ PAUSE ============ -->
+  <div id="pause" class="overlay hidden">
+    <div class="title-card narrow">
+      <h2>Paused</h2>
+      <p class="subtitle">Take a breath — the smoke isn't going anywhere.</p>
+      <button id="resumeBtn" class="big-btn">▶&nbsp; Resume</button>
+      <button id="quitBtn" class="ghost-btn">↩&nbsp; Main menu</button>
+    </div>
+  </div>
+
+  <!-- ============ RESULT ============ -->
+  <div id="result" class="overlay hidden">
+    <div class="title-card">
+      <div class="badge" id="resultBadge">Mission complete</div>
+      <h2 id="resultTitle">Everyone is safe!</h2>
+      <p class="subtitle" id="resultText">
+        Our little heroes got everyone out of the flames.
+      </p>
+      <div class="result-stats">
+        <div class="rstat"><span id="resultSaved">0</span><label>people saved</label></div>
+        <div class="rstat"><span id="resultTime">0:00</span><label>time</label></div>
+      </div>
+      <button id="againBtn" class="big-btn">↻&nbsp; Play again</button>
+      <button id="menuBtn" class="ghost-btn">↩&nbsp; Main menu</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

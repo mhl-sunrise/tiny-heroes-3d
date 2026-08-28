@@ -1,0 +1,10 @@
+# Dependencies (not needed to run the game — three.js loads from a CDN)
+node_modules/
+
+# Local scratch / diagnostic files
+_m.*
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db

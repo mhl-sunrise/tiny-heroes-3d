@@ -1,0 +1,10 @@
+{
+  "name": "little-firefighters",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A Three.js web game - two kids save people from a building fire. Runs in any modern mobile/desktop browser.",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check js/main.js && node --check js/game.js && node --check js/world.js && node --check js/characters.js && node --check js/input.js && node --check js/effects.js && node --check js/audio.js && echo OK"
+  }
+}
