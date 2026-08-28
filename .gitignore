@@ -12,3 +12,6 @@ Thumbs.db
 # Scratch / packaging
 github.zip
 _restart-server.ps1
+
+# Full-length fire-ambience download (only the sliced loop in assets/ is used)
+assets/fire-ambience-full.mp3

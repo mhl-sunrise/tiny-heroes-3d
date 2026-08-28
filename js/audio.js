@@ -47,10 +47,74 @@ class AudioBus {
     return this.muted;
   }
 
-  // Continuous crackling fire bed. Intensity 0..1 scales volume + sizzle.
+  // Fire ambience, looping forever. The real recording (assets/fire-ambience.mp3,
+  // soundreality via Pixabay, free to use) is decoded once, looped click-free and
+  // fed into fireGain -- the same node the old procedural crackle used, so the
+  // fire-level + proximity scaling in game.js works unchanged. If the sample is
+  // missing or fails to decode (offline dev, CDN hiccup) we fall back to the
+  // procedural brown-noise roar.
   startFire(intensity) {
     if (!this._ready || this.fireStarted) return;
     this.fireStarted = true;
+    this._fireIntensity = intensity;
+    const ctx = this.ctx;
+
+    this.fireGain = ctx.createGain();
+    this.fireGain.gain.value = 0;
+
+    // slow LFO so the fire "breathes" (applies to sample and fallback alike)
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 6.5;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.03;
+    lfo.connect(lfoGain).connect(this.fireGain.gain);
+    lfo.start();
+
+    this.fireGain.connect(this.master);
+
+    this._loadFireSample()
+      .then(() => this.setFireIntensity(this._fireIntensity))
+      .catch(() => {
+        this._startProceduralFire();
+        this.setFireIntensity(this._fireIntensity);
+      });
+  }
+
+  async _loadFireSample() {
+    const res = await fetch("assets/fire-ambience.mp3");
+    if (!res.ok) throw new Error("fire sample missing (" + res.status + ")");
+    const decoded = await this.ctx.decodeAudioData(await res.arrayBuffer());
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._seamlessLoop(decoded);
+    src.loop = true;
+    src.connect(this.fireGain);
+    src.start();
+  }
+
+  // The raw slice has an arbitrary start/end, so the loop point would click.
+  // Fix: crossfade the last `fade` samples (the tail) into a copy of the first
+  // `fade` samples (the head) and drop the raw tail -- the loop boundary now
+  // falls inside the crossfade region, so the repeat is inaudible.
+  _seamlessLoop(buffer, fadeSec = 0.5) {
+    const ctx = this.ctx;
+    const fade = Math.min(Math.floor(buffer.sampleRate * fadeSec), Math.floor(buffer.length / 4));
+    const len = buffer.length;
+    const outLen = len - fade;
+    const out = ctx.createBuffer(buffer.numberOfChannels, outLen, buffer.sampleRate);
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const src = buffer.getChannelData(ch);
+      const dst = out.getChannelData(ch);
+      for (let i = 0; i < fade; i++) {
+        const t = i / fade;
+        dst[i] = src[len - fade + i] * (1 - t) + src[i] * t;
+      }
+      dst.set(src.subarray(fade, outLen), fade);
+    }
+    return out;
+  }
+
+  // Fallback fire sound (original procedural version): brown noise band-passed.
+  _startProceduralFire() {
     const ctx = this.ctx;
     const bufSize = 2 * ctx.sampleRate;
     const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
@@ -71,26 +135,16 @@ class AudioBus {
     bp.frequency.value = 520;
     bp.Q.value = 0.7;
 
-    this.fireGain = ctx.createGain();
-    this.fireGain.gain.value = 0;
-
-    // subtle LFO to breathe the flame
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 6.5;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.03;
-    lfo.connect(lfoGain).connect(this.fireGain.gain);
-
-    src.connect(bp).connect(this.fireGain).connect(this.master);
+    src.connect(bp).connect(this.fireGain);
     src.start();
-    lfo.start();
-    this.setFireIntensity(intensity);
   }
 
   setFireIntensity(intensity) {
     if (!this.fireGain) return;
-    // 0.3 peak: a far fire stays a murmur, a fire right next to you is a roar
-    const target = Math.max(0, Math.min(1, intensity)) * 0.3;
+    // 0.45 peak: a far fire stays a murmur, a fire right next to you is a roar.
+    // (Higher than the old procedural 0.3 because the real recording sits
+    // quieter than synthesized noise at the same gain.)
+    const target = Math.max(0, Math.min(1, intensity)) * 0.45;
     this.fireGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.6);
   }
 
