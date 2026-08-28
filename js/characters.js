@@ -331,42 +331,47 @@ export function createFirefighter() {
 
   // --- Helmet: dome + brim + front peak + crest + shield + lamp + band.
   // All parts are HEAD-LOCAL (the head group sits at y=1.3 in the body).
-  // The dome hugs the skull (head r=0.24): rim wraps 2cm outside the head,
-  // top sits 1cm above the skull — real helmet clearance, not a floating ball.
+  // The dome only covers the CROWN: its rim stops just below the brows, so
+  // the whole face (eyes/mouth/cheeks) stays clear — a helmet on the head,
+  // not a mask over the face. The brim flange rides the dome rim.
   const helmet = new THREE.Group();
-  helmet.position.y = 0;
+  helmet.position.y = 0.02; // sit the shell up on the crown
   const dome = mesh(
-    new THREE.SphereGeometry(0.26, 26, 16, 0, Math.PI * 2, 0, Math.PI * 0.56),
+    new THREE.SphereGeometry(0.26, 26, 16, 0, Math.PI * 2, 0, Math.PI * 0.42),
     orange
   );
   helmet.add(dome);
-  const brim = mesh(new THREE.CylinderGeometry(0.3, 0.315, 0.04, 24), orangeDark);
-  brim.position.y = -0.045;
+  // flange: a short, slightly wider ring riding just under the dome rim
+  const brim = mesh(new THREE.CylinderGeometry(0.27, 0.285, 0.04, 24), orangeDark);
+  brim.position.y = 0.045;
   helmet.add(brim);
-  // front peak: half-pipe whose arc covers the +Z (face) side
+  // front peak: half-pipe whose arc covers the +Z (face) side — a real
+  // firefighter peak, tucked under the brim, sitting just above the eyes
   const peak = mesh(
-    new THREE.CylinderGeometry(0.14, 0.155, 0.03, 18, 1, false, -Math.PI / 2, Math.PI),
+    new THREE.CylinderGeometry(0.12, 0.135, 0.03, 18, 1, false, -Math.PI / 2, Math.PI),
     orangeDark
   );
-  peak.position.set(0, -0.048, 0.2);
+  peak.position.set(0, 0.035, 0.14);
   helmet.add(peak);
   const crest = mesh(new THREE.BoxGeometry(0.06, 0.05, 0.3), orangeDark);
-  crest.position.set(0, 0.245, 0.02);
+  crest.position.set(0, 0.255, 0.02);
   helmet.add(crest);
+  // badge on the front of the dome, well ABOVE the eyes
   const shield = mesh(new THREE.BoxGeometry(0.14, 0.07, 0.03), silver);
-  shield.position.set(0, 0.03, 0.25);
-  shield.rotation.x = -0.1;
+  shield.position.set(0, 0.11, 0.23);
+  shield.rotation.x = -0.44;
   helmet.add(shield);
-  const band = mesh(new THREE.TorusGeometry(0.252, 0.015, 8, 24), lime);
+  // lime trim ring wrapping the brim flange (rides proud of its surface)
+  const band = mesh(new THREE.TorusGeometry(0.275, 0.018, 8, 24), lime);
   band.rotation.x = Math.PI / 2;
-  band.position.y = -0.03;
+  band.position.y = 0.045;
   helmet.add(band);
   const lamp = mesh(
     new THREE.SphereGeometry(0.035, 12, 12),
     std(0xfff6d8, { emissive: 0xffe9a8, emissiveIntensity: 2.2, roughness: 0.3 })
   );
   lamp.scale.set(1, 0.8, 0.6);
-  lamp.position.set(0, 0.13, 0.22);
+  lamp.position.set(0, 0.19, 0.17);
   helmet.add(lamp);
   k.head.add(helmet);
   // --- SCBA air tank on the back
