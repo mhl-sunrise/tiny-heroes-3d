@@ -141,7 +141,7 @@ export class Game {
       a.x = 11.72; // just in front of the ladder rails
       a.z = -0.5; // the ladder's centerline
       a.g.rotation.y = -Math.PI / 2; // face the ladder (back to the street)
-      a.g.position.y = this._climbFrom;
+      a.g.position.set(a.x, this._climbFrom, a.z); // group goes ON the ladder
       this.heroY = this._climbFrom;
       this.audio.levelUp();
       this.audio.climb();
@@ -617,7 +617,7 @@ export class Game {
       const e = p * p * (3 - 2 * p); // smoothstep
       this.heroY = this._climbFrom + (this._climbTo - this._climbFrom) * e;
       const a = this.heroes[0];
-      a.g.position.y = this.heroY;
+      a.g.position.set(a.x, this.heroY, a.z); // stay pinned to the ladder
       a.g.rotation.y = -Math.PI / 2; // face the ladder
       // climbing pose: hands over the rail, legs alternating
       const t = this._climbT * 7;

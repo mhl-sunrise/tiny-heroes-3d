@@ -67,6 +67,9 @@ const audio = new AudioBus();
 // --- HUD (all DOM logic in systems/hud.js) + game ---
 const hud = createHud();
 const game = new Game({ scene, camera, world, input, audio, ui: hud });
+// tiny debug handle: from the browser console you can poke the game directly,
+// e.g. __game.play(1) to jump to a level, __game.state to see the current one.
+window.__game = game;
 
 // --- Render loop ---
 // One exception used to kill the whole rAF chain silently (frozen game, no
