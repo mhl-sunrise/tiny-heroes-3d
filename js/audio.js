@@ -8,6 +8,7 @@ class AudioBus {
     this.muted = false;
     this.fireGain = null;
     this.fireStarted = false;
+    this._boomBuf = null; // decoded "collapsing structure" one-shot (polyphonic)
     this._ready = false;
   }
 
@@ -29,6 +30,7 @@ class AudioBus {
       comp.release.value = 0.18;
       this.master.connect(comp).connect(this.ctx.destination);
       this._ready = true;
+      this._loadBoomSample(); // non-blocking; boom() stays procedural until it lands
     } catch (e) {
       this._ready = false;
     }
@@ -214,7 +216,39 @@ class AudioBus {
     this._noiseBurst(0.09, 1400, 0.4, "bandpass"); // dry snap of breaking plaster
     setTimeout(() => this.blip(85, 0.16, "sawtooth", 0.25), 60); // low groan after
   }
+  async _loadBoomSample() {
+    try {
+      const res = await fetch("assets/debris-crash.mp3");
+      if (!res.ok) return;
+      this._boomBuf = await this.ctx.decodeAudioData(await res.arrayBuffer());
+    } catch {
+      /* keep the procedural fallback */
+    }
+  }
   boom(vol = 1) {
+    // Real "collapsing structure" recording (Mixkit, free licence): concrete
+    // slams down, dust scatters, long settling tail. Random playback rate
+    // (0.85-1.15x) keeps repeated impacts from sounding copy-pasted. vol is
+    // distance-scaled (near = violent). Polyphonic: one fresh source per hit.
+    if (this._ready && this._boomBuf) {
+      const ctx = this.ctx;
+      const t = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = this._boomBuf;
+      src.playbackRate.value = 0.85 + Math.random() * 0.3;
+      const g = ctx.createGain();
+      const dur = this._boomBuf.duration / src.playbackRate.value;
+      const peak = 0.9 * vol;
+      g.gain.setValueAtTime(peak, t);
+      g.gain.setValueAtTime(peak, t + Math.max(0, dur - 0.25));
+      g.gain.linearRampToValueAtTime(0, t + dur); // no click at the sample end
+      src.connect(g).connect(this.master);
+      src.start(t);
+      return;
+    }
+    this._proceduralBoom(vol); // sample not loaded yet (or failed)
+  }
+  _proceduralBoom(vol = 1) {
     // debris impact: a real EXPLOSION — chest-thumping sub drop, a sharp
     // crack at the moment of contact, a muffled smash, then a rolling
     // building-shake tail. vol is distance-scaled (near = violent).
