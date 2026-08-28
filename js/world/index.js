@@ -159,7 +159,9 @@ export function createWorld(scene) {
       s.fire.update(dt, time, target);
     }
 
-    smoke.mat.uniforms.uTime.value = time;
+    // Wall clock too, so smoke keeps drifting at full speed on frame-dropped
+  // phones (same reason as the flame shader).
+  smoke.mat.uniforms.uTime.value = performance.now() * 0.001 % 3600;
     smoke.mat.uniforms.uGlobal.value = (0.28 + fireLevel * 0.95) * smokeMul;
     if (embers) embers.update(dt, fireLevel > 0.03);
 

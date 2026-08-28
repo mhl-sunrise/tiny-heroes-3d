@@ -35,6 +35,25 @@ renderer.toneMappingExposure = 1.4;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 $("game").appendChild(renderer.domElement);
 
+// Mobile GPUs can drop the WebGL context under load (thermal, driver, tab
+// switching) — the canvas then freezes as a still image. Three.js restores
+// itself on "webglcontextrestored" as long as we preventDefault on the lost
+// event; the banner tells the player it's a hiccup, not a dead game.
+const glBanner = $("glBanner");
+let glBannerTimer = 0;
+renderer.domElement.addEventListener("webglcontextlost", (e) => {
+  e.preventDefault(); // required for auto-restore
+  if (glBanner) {
+    glBanner.classList.remove("hidden");
+    clearTimeout(glBannerTimer);
+    glBannerTimer = setTimeout(() => glBanner.classList.add("hidden"), 8000);
+  }
+});
+renderer.domElement.addEventListener("webglcontextrestored", () => {
+  clearTimeout(glBannerTimer);
+  if (glBanner) glBanner.classList.add("hidden");
+});
+
 // --- Scene / camera / fog / lights ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x24304f);

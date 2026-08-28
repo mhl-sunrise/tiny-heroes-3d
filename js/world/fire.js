@@ -97,10 +97,16 @@ export class Fire {
     this.intensity = 0;
   }
   update(dt, time, target) {
+    // The noise field runs on WALL CLOCK, not game time: if the device drops
+    // frames the main loop clamps dt to 50ms and the whole simulation crawls,
+    // but the fire must keep its full real-time liveliness (a "static" flame
+    // reads as a frozen game). Wrapped at 3600s so the value stays small for
+    // the fragment shader's float precision on mobile GPUs.
+    const wt = performance.now() * 0.001 % 3600;
     this.intensity += (target - this.intensity) * Math.min(1, dt * 1.5);
-    const fl = 0.82 + 0.18 * Math.sin(time * 21) * Math.sin(time * 7.3);
+    const fl = 0.82 + 0.18 * Math.sin(wt * 21) * Math.sin(wt * 7.3);
     for (const m of this.mats) {
-      m.uniforms.uTime.value = time;
+      m.uniforms.uTime.value = wt;
       m.uniforms.uIntensity.value = this.intensity * fl;
     }
     this.light.intensity = this.intensity * (22 * fl + Math.random() * 4) * this.lightMul;
