@@ -151,6 +151,27 @@ export class Game {
   clampHero(k) {
     k.x = clamp(k.x, BOUNDS.minX, BOUNDS.maxX);
     k.z = clamp(k.z, BOUNDS.minZ, BOUNDS.maxZ);
+    // Maze: push the hero's body circle out of every solid obstacle box
+    // (resolve along the smallest penetration axis — cheap, stable, no
+    // sliding-jitter; the boxes are axis-aligned by construction).
+    const R = 0.4;
+    for (const b of this.world.colliders) {
+      const minX = b.minX - R,
+        maxX = b.maxX + R;
+      const minZ = b.minZ - R,
+        maxZ = b.maxZ + R;
+      if (k.x > minX && k.x < maxX && k.z > minZ && k.z < maxZ) {
+        const dxl = k.x - minX,
+          dxr = maxX - k.x,
+          dzl = k.z - minZ,
+          dzr = maxZ - k.z;
+        const m = Math.min(dxl, dxr, dzl, dzr);
+        if (m === dxl) k.x = minX;
+        else if (m === dxr) k.x = maxX;
+        else if (m === dzl) k.z = minZ;
+        else k.z = maxZ;
+      }
+    }
   }
 
   updateHeroes(dt, mv, time) {

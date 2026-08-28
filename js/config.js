@@ -129,6 +129,40 @@ export const ULTRA = {
   microShake: 0.05,
 };
 
+/* ------------------------------ maze obstacles -------------------------- */
+// Solid set-pieces per floor that give each shift a little-maze layout.
+// x/z center, w/d full size, h height, kind = look. Placement rules (checked
+// by eye): never blocks the exit zone (0, 5.8 r2.3), hero spawn (0, 4.6), any
+// victim spot or fire spot; all heights < 2.6 so the orbit camera (min ~4.2)
+// always sees over them. Gaps are wide enough (>= 2.4) to walk through.
+const OB = (x, z, w, d, h, kind) => ({ x, z, w, d, h, kind });
+export const MAZE = [
+  // Floor 0 — First Alarm: an L of half-wall + counter, sofa and crates
+  [
+    OB(-4, -2, 4.4, 0.4, 1.8, "wall"), // back-left divider, open at both ends
+    OB(2.5, -3.1, 2.4, 0.9, 1.0, "table"),
+    OB(-6.2, 0.6, 2.4, 0.9, 0.85, "sofa"),
+    OB(4.6, 1.6, 1.4, 1.4, 1.2, "crate"),
+    OB(7.8, 4.4, 0.4, 2.4, 1.8, "wall"), // right-side sliver, gap at both ends
+  ],
+  // Floor 1 — Rising Smoke: central spine wall + corner pocket for victim e
+  [
+    OB(-1, -1.5, 5, 0.4, 1.8, "wall"), // spine, big gaps east + west
+    OB(5, 0.5, 2, 0.9, 1.0, "table"),
+    OB(-7.6, 1.5, 2.4, 0.9, 0.85, "sofa"),
+    OB(-2.6, 3.3, 1.3, 1.3, 1.1, "crate"),
+    OB(8.5, -2.5, 0.4, 2.5, 1.8, "wall"), // hides victim e until you round it
+  ],
+  // Floor 2 — Inferno: two staggered walls make a zig-zag through the middle
+  [
+    OB(-3, -1, 4.5, 0.4, 1.8, "wall"),
+    OB(3.5, 0.5, 4.5, 0.4, 1.8, "wall"),
+    OB(4.5, 4.4, 2.4, 0.9, 0.85, "sofa"),
+    OB(6.8, 4.2, 1.3, 1.3, 1.1, "crate"),
+    OB(0, -2.8, 1.6, 1.0, 1.0, "table"),
+  ],
+];
+
 /* ------------------------------ performance ----------------------------- */
 // Mobile GPUs cannot run this point-light-heavy night scene at desktop cost.
 // One profile per device class so balancing happens in a single place.

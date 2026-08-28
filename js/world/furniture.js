@@ -3,6 +3,7 @@
 // Each floor is a group in FLOOR-LOCAL coordinates (y=0 at the floor face);
 // world/index.js shows only the current one and lifts it to the right height.
 import * as THREE from "three";
+import { MAZE } from "../config.js";
 
 function std(color, o = {}) {
   return new THREE.MeshStandardMaterial(
@@ -197,6 +198,102 @@ function buildAttic() {
   lie.rotation.y = 0.7;
   g.add(lie);
   return g;
+}
+
+/* ------------------------------ MAZE OBSTACLES -------------------------- */
+// Solid set-pieces (half-walls, tables, sofas, crate stacks) that maze up each
+// floor. Built from the MAZE config so the layout lives in ONE place. Every
+// entry also yields an AABB (minX/maxX/minZ/maxZ, floor-local) for hero
+// collision — world/index.js hands the active floor's list to the game.
+function buildWallOb(o) {
+  const g = new THREE.Group();
+  const body = box(o.w, o.h, o.d, 0x7d7468, { roughness: 0.95 });
+  body.position.y = o.h / 2;
+  g.add(body);
+  // charred, broken top edge — it's a building on fire, not a park
+  const char = box(o.w + 0.04, 0.14, o.d + 0.04, 0x241d16);
+  char.position.y = o.h + 0.05;
+  g.add(char);
+  // a darker scorch patch on the face
+  const patch = box(o.w * 0.4, o.h * 0.5, o.d + 0.02, 0x4a4238);
+  patch.position.set(o.w * 0.15, o.h * 0.42, 0);
+  g.add(patch);
+  g.position.set(o.x, 0, o.z);
+  return g;
+}
+function buildTableOb(o) {
+  const g = new THREE.Group();
+  const top = box(o.w, 0.08, o.d, 0x5a4632);
+  top.position.y = o.h;
+  g.add(top);
+  const h = o.h - 0.04;
+  for (const [lx, lz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ]) {
+    const leg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, h, 6),
+      std(0x4a3a28)
+    );
+    leg.position.set(lx * (o.w / 2 - 0.1), h / 2, lz * (o.d / 2 - 0.1));
+    g.add(leg);
+  }
+  // something knocked over on the floor next to it (story beat)
+  const fallen = box(0.3, 0.3, 0.3, 0x6a5138);
+  fallen.position.set(o.w / 2 + 0.3, 0.15, o.d / 2 - 0.1);
+  fallen.rotation.y = 0.6;
+  g.add(fallen);
+  g.position.set(o.x, 0, o.z);
+  return g;
+}
+function buildSofaOb(o) {
+  const g = new THREE.Group();
+  const seat = box(o.w, 0.42, o.d, 0x4a6a8a);
+  seat.position.y = 0.21;
+  const back = box(o.w, o.h - 0.35, 0.22, 0x3e5a76);
+  back.position.set(0, 0.42 + (o.h - 0.35) / 2, -o.d / 2 + 0.11);
+  g.add(seat, back);
+  for (const sx of [-1, 1]) {
+    const arm = box(0.22, 0.58, o.d, 0x3e5a76);
+    arm.position.set(sx * (o.w / 2 - 0.11), 0.29, 0);
+    g.add(arm);
+  }
+  g.position.set(o.x, 0, o.z);
+  return g;
+}
+function buildCrateOb(o) {
+  const g = new THREE.Group();
+  const n = Math.round(o.h / 0.55); // stack of crates ~0.55 tall each
+  for (let i = 0; i < n; i++) {
+    const s = Math.min(o.w, o.d) * (i % 2 ? 0.78 : 1);
+    const c = box(s, 0.55, s, i % 2 ? 0x7a5c38 : 0x8a6a42);
+    c.position.set((i % 2 ? 0.12 : -0.08), 0.275 + i * 0.55, 0);
+    c.rotation.y = i % 2 ? 0.35 : -0.15;
+    g.add(c);
+  }
+  g.position.set(o.x, 0, o.z);
+  return g;
+}
+const OB_BUILDERS = { wall: buildWallOb, table: buildTableOb, sofa: buildSofaOb, crate: buildCrateOb };
+
+export function buildMaze() {
+  return MAZE.map((layout) => {
+    const g = new THREE.Group();
+    const boxes = [];
+    for (const o of layout) {
+      const b = OB_BUILDERS[o.kind] ? OB_BUILDERS[o.kind](o) : buildWallOb(o);
+      g.add(b);
+      boxes.push({
+        minX: o.x - o.w / 2,
+        maxX: o.x + o.w / 2,
+        minZ: o.z - o.d / 2,
+        maxZ: o.z + o.d / 2,
+      });
+    }
+    return { g, boxes };
+  });
 }
 
 /* ------------------------------- assembly ------------------------------ */

@@ -5,7 +5,7 @@ import { LEVELS, FLOOR_H, PERF } from "../config.js";
 import { buildSky, buildMoon, buildClouds, buildSkyline } from "./sky.js";
 import { buildEnvironment, buildWindows, buildDetails } from "./building.js";
 import { buildStreet } from "./street.js";
-import { buildFurniture, buildFloorPlatform } from "./furniture.js";
+import { buildFurniture, buildFloorPlatform, buildMaze } from "./furniture.js";
 import { Fire, buildExit } from "./fire.js";
 import { buildSmoke, buildEmbers } from "./smoke.js";
 import { buildFireTruck } from "./truck.js";
@@ -38,9 +38,23 @@ export function createWorld(scene) {
   const street = buildStreet();
   world.add(street.g);
 
-  // Per-floor interiors + the platform that carries upper floors
+  // Per-floor interiors + the platform that carries upper floors.
+  // Each floor group is built in floor-local coords (y=0 at the floor face),
+  // so lift it to its story's height here — without this the upper-floor
+  // interiors sit hidden under the platform and the story looks empty.
   const furnitureFloors = buildFurniture();
-  furnitureFloors.forEach((f) => world.add(f));
+  furnitureFloors.forEach((f, i) => {
+    f.position.y = i * FLOOR_H;
+    world.add(f);
+  });
+  // Maze obstacles (solid set-pieces) — one group per floor + AABBs for
+  // hero collision; the active floor's boxes are exposed as `colliders`.
+  const mazeFloors = buildMaze();
+  mazeFloors.forEach((m, i) => {
+    m.g.position.y = i * FLOOR_H;
+    world.add(m.g);
+  });
+  let colliders = [];
   const platform = buildFloorPlatform();
   platform.visible = false;
   world.add(platform);
@@ -89,6 +103,10 @@ export function createWorld(scene) {
     furnitureFloors.forEach((f, i) => {
       f.visible = i === floor;
     });
+    mazeFloors.forEach((m, i) => {
+      m.g.visible = i === floor;
+    });
+    colliders = mazeFloors[floor].boxes;
     // Platform carries the upper story, including its CEILING. Ground floor
     // has neither — the camera looks down on that room from outside/above.
     platform.visible = floor > 0;
@@ -109,6 +127,20 @@ export function createWorld(scene) {
         world.remove(fires[i].fire.group);
         fires.splice(i, 1);
         scorchCount--;
+      }
+    }
+    // nudge the burn out of any maze obstacle so flames never clip furniture
+    for (const b of colliders) {
+      if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) {
+        const dxl = x - b.minX,
+          dxr = b.maxX - x,
+          dzl = z - b.minZ,
+          dzr = b.maxZ - z;
+        const m = Math.min(dxl, dxr, dzl, dzr);
+        if (m === dxl) x = b.minX - 0.4;
+        else if (m === dxr) x = b.maxX + 0.4;
+        else if (m === dzl) z = b.minZ - 0.4;
+        else z = b.maxZ + 0.4;
       }
     }
     const fire = new Fire(new THREE.Vector3(x, floorY, z), 0.65);
@@ -169,6 +201,9 @@ export function createWorld(scene) {
     group: world,
     setLevel,
     spawnScorch,
+    get colliders() {
+      return colliders;
+    },
     get fires() {
       return fires;
     },
