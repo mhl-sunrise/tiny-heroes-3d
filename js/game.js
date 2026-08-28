@@ -126,19 +126,26 @@ export class Game {
     this.reset();
     this.ui.showHud(true);
     if (level > 0) {
-      // Between shifts the firefighter climbs the fire escape up a floor.
+      // Between shifts the firefighter climbs the OUTDOOR fire escape (ladder
+      // on the right wall, rails at x=11.57) up a floor. He starts on the
+      // ladder itself so the climb reads against the facade — the camera
+      // parks outside the building and watches the whole way up.
       this.state = "climbing";
       this._climbT = 0;
       this._climbFrom = this.floorY - FLOOR_H;
       this._climbTo = this.floorY;
       const a = this.heroes[0];
-      a.x = BOUNDS.maxX;
-      a.z = -0.5;
-      a.g.rotation.y = Math.PI / 2; // face the fire escape wall (+X)
+      a.x = 11.72; // just in front of the ladder rails
+      a.z = -0.5; // the ladder's centerline
+      a.g.rotation.y = -Math.PI / 2; // face the ladder (back to the street)
       a.g.position.y = this._climbFrom;
       this.heroY = this._climbFrom;
       this.audio.levelUp();
       this.audio.climb();
+      // hard cut to the parked outside view (dt=10 -> 100% lerp, so all
+      // clamps apply): avoids the camera sliding through the right wall
+      this.yaw = Math.PI / 2;
+      this.updateCamera(10);
     } else {
       this.state = "playing";
     }
@@ -441,23 +448,40 @@ export class Game {
 
   updateCamera(dt) {
     const look = this.input.consumeLook();
-    this.yaw -= look.x * 0.006;
-    this.pitch = clamp(this.pitch + look.y * 0.005, 0.3, 1.2);
+    const transitioning =
+      this.state === "climbing" || this.state === "entering";
+    if (transitioning) {
+      // Fire-escape transition: park the camera OUTSIDE the right wall, on
+      // the +X side of the hero (yaw = π/2), closer in and level-ish, so the
+      // whole climb is visible against the facade. The sightline stays at
+      // x > 11.45 (outside the wall), so nothing occludes the hero.
+      this.yaw = lerpAngle(this.yaw, Math.PI / 2, Math.min(1, dt * 3));
+      this.pitch += (0.62 - this.pitch) * Math.min(1, dt * 3);
+    } else {
+      this.yaw -= look.x * 0.006;
+      this.pitch = clamp(this.pitch + look.y * 0.005, 0.3, 1.2);
+    }
     const a = this.heroes[0];
     const cx = a.x;
     const cz = a.z;
     const cy = this.heroY + 1.0; // rides the current floor (incl. climbing)
+    const radius = transitioning ? this.radius * 0.6 : this.radius;
     const cp = Math.cos(this.pitch);
     const desired = new THREE.Vector3(
-      cx + Math.sin(this.yaw) * cp * this.radius,
-      cy + Math.sin(this.pitch) * this.radius,
-      cz + Math.cos(this.yaw) * cp * this.radius
+      cx + Math.sin(this.yaw) * cp * radius,
+      cy + Math.sin(this.pitch) * radius,
+      cz + Math.cos(this.yaw) * cp * radius
     );
     this.camPos.lerp(desired, Math.min(1, dt * 6));
     // never let the orbit push the camera through the walls or roof:
     // clamp to the play volume (side walls' inside faces at x=±10.95,
-    // back wall at z=-6.95, front side is open street).
-    this.camPos.x = clamp(this.camPos.x, -10.4, 10.4);
+    // back wall at z=-6.95, front side is open street). While parked on the
+    // fire escape the camera legitimately lives outside the right wall.
+    this.camPos.x = clamp(
+      this.camPos.x,
+      -10.4,
+      transitioning ? 18 : 10.4
+    );
     this.camPos.z = clamp(this.camPos.z, -6.3, 8.4);
     // On upper stories the camera must stay UNDER the story ceiling (roof on
     // the attic). Without this it rises above the roof, which occludes the
@@ -648,8 +672,9 @@ export class Game {
 
   update(dt) {
     if (this.state === "climbing") {
-      // Ladder climb between shifts: the hero rises one floor on the
-      // fire escape while the camera follows; everything else idles.
+      // Fire-escape climb between shifts: the hero rises one floor on the
+      // ladder OUTSIDE the right wall, where the camera (parked outside,
+      // see updateCamera) sees the whole climb. Everything else idles.
       this._t += dt;
       this._climbT += dt;
       const p = Math.min(1, this._climbT / 2.4);
@@ -657,7 +682,7 @@ export class Game {
       this.heroY = this._climbFrom + (this._climbTo - this._climbFrom) * e;
       const a = this.heroes[0];
       a.g.position.y = this.heroY;
-      a.g.rotation.y = Math.PI / 2;
+      a.g.rotation.y = -Math.PI / 2; // face the ladder
       // climbing pose: hands over the rail, legs alternating
       const t = this._climbT * 7;
       a.armL.rotation.set(-2.5 + Math.sin(t) * 0.15, 0, 0.25);
@@ -668,8 +693,37 @@ export class Game {
       this.prompt = "🪜  Climbing to the " + FLOOR_NAMES[this.level] + "…";
       this.updateCamera(dt);
       if (p >= 1) {
-        this.state = "playing";
+        // reached the landing — now step through into the room
+        this.state = "entering";
+        this._enterT = 0;
         this.heroY = this._climbTo;
+        this._enterFrom = a.x; // 11.72, on the landing
+        this._enterTo = BOUNDS.maxX - 0.2; // inside, near the wall
+      }
+      return;
+    }
+    if (this.state === "entering") {
+      // Short walk from the fire-escape landing through the wall into the
+      // room. The camera stays OUTSIDE during this, so the wall face hides
+      // the hero as he disappears — then a hard cut reframes the new floor.
+      this._t += dt;
+      this._enterT += dt;
+      const p = Math.min(1, this._enterT / 0.55);
+      const e = p * p * (3 - 2 * p);
+      const a = this.heroes[0];
+      a.x = this._enterFrom + (this._enterTo - this._enterFrom) * e;
+      a.g.position.set(a.x, this.heroY, a.z);
+      a.g.rotation.y = -Math.PI / 2; // facing the wall he's stepping through
+      a.update(dt, { moving: true, moveSpeed: 0.7, carrying: false, time: this._t });
+      this.world.update(dt, this._t, this._lastLvl);
+      this.prompt = "";
+      this.updateCamera(dt);
+      if (p >= 1) {
+        this.state = "playing";
+        // hard cut: snap the orbit to a clean interior framing (updateCamera
+        // with dt=10 lerps 100%, so all the usual clamps still apply)
+        this.yaw = 0;
+        this.updateCamera(10);
         this._banner = FLOOR_NAMES[this.level] + " — save everyone!";
         this._bannerT = 3;
       }
