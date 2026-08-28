@@ -4,8 +4,12 @@
 import * as THREE from "three";
 import { PERF, IS_MOBILE } from "../config.js";
 
+// Phones can't afford the PBR (Standard) fragment cost: same colors/emissive,
+// much cheaper Lambert. Desktop keeps the full PBR look.
+const StdMat = PERF.useLambert ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
+
 function stdMat(color, o = {}) {
-  return new THREE.MeshStandardMaterial(
+  return new StdMat(
     Object.assign({ color, roughness: 0.85, metalness: 0 }, o)
   );
 }
@@ -175,7 +179,7 @@ function buildStreetExtras(g) {
   }
 
   // zebra crossing over the road
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xd8dce6, roughness: 0.9 });
+  const stripeMat = new StdMat({ color: 0xd8dce6, roughness: 0.9 });
   for (const px of [-1.65, -1.0, -0.35, 0.35, 1.0, 1.65]) {
     const s = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 3.4), stripeMat);
     s.rotation.x = -Math.PI / 2;

@@ -173,18 +173,33 @@ export const IS_MOBILE =
 
 export const PERF = {
   // Renderer: phones render far more CSS pixels per inch — cap the ratio.
-  pixelRatioCap: IS_MOBILE ? 1.5 : 2,
+  // 1.0 is the playability line: it's ~55% fewer pixels than 1.5 on a
+  // typical phone, and fill rate (not resolution) is what the GPU drowns in.
+  pixelRatioCap: IS_MOBILE ? 1.0 : 2,
+  // 120/144Hz phones would otherwise render the whole scene at display rate.
+  // Capping at 60fps halves the per-second GPU cost; 0 = uncapped.
+  frameRateCap: IS_MOBILE ? 60 : 0,
   // Post chain (bloom = 4+ fullscreen passes) is skipped on mobile; the scene
   // renders straight to the MSAA canvas instead (antialias then pays off).
   postFX: !IS_MOBILE,
+  // Per-pixel material model: PBR (Standard) is the single biggest fragment
+  // cost in this light-heavy night scene. Phones use plain Lambert — same
+  // colors/emissive/maps, but no specular GGX loop per light.
+  useLambert: IS_MOBILE,
   // Point-light budget: every light is evaluated per-pixel in every PBR
   // material. Desktop can take them all; phones keep only the nearest fires
   // lit (unlit flames still glow via their emissive shader planes).
-  fireLights: IS_MOBILE ? 3 : Infinity,
+  fireLights: IS_MOBILE ? 2 : Infinity,
   scorchLightMul: IS_MOBILE ? 0 : 1, // scorch fires keep flames, lose their light
   windowLights: IS_MOBILE ? 0 : 2, // windows keep glowing, lose their lights
   streetLightInt: IS_MOBILE ? 3.5 : 9,
+  // The 4th scene light (warm fill) is nearly invisible at night but costs a
+  // per-pixel evaluation — drop it on phones.
+  fillLight: !IS_MOBILE,
   // Flame shader: fewer crossed planes + fewer noise octaves per fragment.
   flamePlanes: IS_MOBILE ? 2 : 3,
   flameOctaves: IS_MOBILE ? 3 : 5,
+  // Smoke: big soft particles are pure overdraw; phones get fewer, smaller.
+  smokeCount: IS_MOBILE ? 80 : 140,
+  smokeScale: IS_MOBILE ? 0.7 : 1,
 };

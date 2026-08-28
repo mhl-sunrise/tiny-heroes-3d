@@ -1,5 +1,6 @@
 // world/smoke.js â€” the GPU-driven smoke column and the rising embers.
 import * as THREE from "three";
+import { PERF } from "../config.js";
 /* ------------------------------ SMOKE ---------------------------------- */
 const SMOKE_VERT = `
   uniform float uTime;
@@ -31,7 +32,7 @@ const SMOKE_FRAG = `
   }`;
 
 export function buildSmoke() {
-  const N = 140;
+  const N = PERF.smokeCount;
   const pos = new Float32Array(N * 3);
   const aSize = new Float32Array(N);
   const aSeed = new Float32Array(N);
@@ -41,7 +42,7 @@ export function buildSmoke() {
     pos[i * 3] = (Math.random() - 0.5) * 20;
     pos[i * 3 + 1] = 1.5 + Math.random() * 2.5;
     pos[i * 3 + 2] = (Math.random() - 0.5) * 12 - 2;
-    aSize[i] = 2.0 + Math.random() * 3.0;
+    aSize[i] = (2.0 + Math.random() * 3.0) * PERF.smokeScale;
     aSeed[i] = Math.random();
     aBorn[i] = Math.random() * 40;
   }

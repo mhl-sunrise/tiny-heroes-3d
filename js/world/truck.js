@@ -1,11 +1,16 @@
 // world/truck.js â€” the fire truck parked at the curb with flashing beacons.
 import * as THREE from "three";
+import { PERF } from "../config.js";
+
+// Phones can't afford the PBR (Standard) fragment cost: same colors/emissive,
+// much cheaper Lambert. Desktop keeps the full PBR look.
+const StdMat = PERF.useLambert ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
 /* --------------------------- FIRE TRUCK -------------------------------- */
 export function buildFireTruck() {
   const g = new THREE.Group();
-  const red = new THREE.MeshStandardMaterial({ color: 0xc1272d, roughness: 0.4, metalness: 0.3 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x181b22, roughness: 0.6 });
-  const chrome = new THREE.MeshStandardMaterial({ color: 0xcfd6e0, roughness: 0.25, metalness: 0.8 });
+  const red = new StdMat({ color: 0xc1272d, roughness: 0.4, metalness: 0.3 });
+  const dark = new StdMat({ color: 0x181b22, roughness: 0.6 });
+  const chrome = new StdMat({ color: 0xcfd6e0, roughness: 0.25, metalness: 0.8 });
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 4.4), red);
   body.position.y = 1.1;
@@ -15,7 +20,7 @@ export function buildFireTruck() {
   g.add(cab);
   const glass = new THREE.Mesh(
     new THREE.BoxGeometry(1.9, 0.7, 0.1),
-    new THREE.MeshStandardMaterial({ color: 0x24343f, roughness: 0.15, metalness: 0.5 })
+    new StdMat({ color: 0x24343f, roughness: 0.15, metalness: 0.5 })
   );
   glass.position.set(0, 1.72, 2.6);
   g.add(glass);
@@ -40,8 +45,8 @@ export function buildFireTruck() {
   const bar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.22, 0.42), dark);
   bar.position.set(0, 2.32, 1.9);
   g.add(bar);
-  const beaconMatR = new THREE.MeshStandardMaterial({ color: 0xff2b2b, emissive: 0xff2b2b, emissiveIntensity: 2 });
-  const beaconMatB = new THREE.MeshStandardMaterial({ color: 0x2b6bff, emissive: 0x2b6bff, emissiveIntensity: 2 });
+  const beaconMatR = new StdMat({ color: 0xff2b2b, emissive: 0xff2b2b, emissiveIntensity: 2 });
+  const beaconMatB = new StdMat({ color: 0x2b6bff, emissive: 0x2b6bff, emissiveIntensity: 2 });
   const beaconR = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 10), beaconMatR);
   beaconR.position.set(-0.5, 2.5, 1.9);
   const beaconB = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 10), beaconMatB);

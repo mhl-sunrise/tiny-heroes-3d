@@ -43,8 +43,10 @@ export class Game {
     this.yaw = 0;
     this.pitch = 0.6;
     this.radius = 11;
+    this._fireSlots = []; // pre-allocated fire list fed to the health system
     this.camPos = new THREE.Vector3(0, 6, 14);
     this._tmp = new THREE.Vector3();
+    this._desired = new THREE.Vector3(); // camera target scratch (no per-frame alloc)
 
     this.heroes = [];
     this.victims = [];
@@ -83,6 +85,7 @@ export class Game {
     this.prompt = "";
     this.health.reset();
     this.world.setLevel(this.levelCfg());
+    this._fireSlots.length = 0; // fire set was just rebuilt — reuse starts clean
     this.floorY = this.world.floorY; // world.setLevel just set it
     this.heroY = this.floorY;
 
@@ -401,12 +404,12 @@ export class Game {
     const cy = this.heroY + 1.0; // rides the current floor (incl. climbing)
     const radius = transitioning ? this.radius * 0.6 : this.radius;
     const cp = Math.cos(this.pitch);
-    const desired = new THREE.Vector3(
+    this._desired.set(
       cx + Math.sin(this.yaw) * cp * radius,
       cy + Math.sin(this.pitch) * radius,
       cz + Math.cos(this.yaw) * cp * radius
     );
-    this.camPos.lerp(desired, Math.min(1, dt * 6));
+    this.camPos.lerp(this._desired, Math.min(1, dt * 6));
     // never let the orbit push the camera through the walls or roof:
     // clamp to the play volume (side walls' inside faces at x=±10.95,
     // back wall at z=-6.95, front side is open street). While parked on the
@@ -465,12 +468,19 @@ export class Game {
 
     // health: fire proximity + ambient smoke vs. safe-zone healing
     const h = this.heroes[0];
-    this.health.update(
-      dt,
-      h,
-      this.world.fires.map((f) => ({ x: f.x, z: f.z, intensity: f.fire.intensity })),
-      lvl
-    );
+    const slots = this._fireSlots;
+    const fireList = this.world.fires;
+    for (let i = 0; i < fireList.length; i++) {
+      const f = fireList[i];
+      if (i < slots.length) {
+        slots[i].x = f.x;
+        slots[i].z = f.z;
+        slots[i].intensity = f.fire.intensity;
+      } else {
+        slots.push({ x: f.x, z: f.z, intensity: f.fire.intensity });
+      }
+    }
+    this.health.update(dt, h, slots, lvl);
     this.audio.heartbeat(this.health.low && this.state === "playing");
     if (!this.health.alive) this.finish(false, "collapsed");
   }

@@ -1,6 +1,11 @@
 // world/building.js â€” the burning building: brick shell, floor slabs, the
 // window grid that catches fire, plus facade and rooftop details.
 import * as THREE from "three";
+import { PERF } from "../config.js";
+
+// Phones can't afford the PBR (Standard) fragment cost: same colors/emissive,
+// much cheaper Lambert. Desktop keeps the full PBR look.
+const StdMat = PERF.useLambert ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
 
 const WALL_H = 9.6;
 const STORY = 3.2;
@@ -57,7 +62,7 @@ export function buildEnvironment() {
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(220, 220),
-    new THREE.MeshStandardMaterial({
+    new StdMat({
       map: makeAsphaltTexture(),
       color: 0xffffff,
       roughness: 0.95,
@@ -69,7 +74,7 @@ export function buildEnvironment() {
 
   const road = new THREE.Mesh(
     new THREE.PlaneGeometry(24, 6),
-    new THREE.MeshStandardMaterial({ color: 0x20222b, roughness: 1 })
+    new StdMat({ color: 0x20222b, roughness: 1 })
   );
   road.rotation.x = -Math.PI / 2;
   road.position.set(0, 0, 11);
@@ -77,7 +82,7 @@ export function buildEnvironment() {
   for (let i = -3; i <= 3; i++) {
     const dash = new THREE.Mesh(
       new THREE.PlaneGeometry(1.2, 0.18),
-      new THREE.MeshStandardMaterial({ color: 0xf5d76b, emissive: 0x332a00, roughness: 1 })
+      new StdMat({ color: 0xf5d76b, emissive: 0x332a00, roughness: 1 })
     );
     dash.rotation.x = -Math.PI / 2;
     dash.position.set(i * 3, 0.012, 11);
@@ -86,7 +91,7 @@ export function buildEnvironment() {
 
   const slab = new THREE.Mesh(
     new THREE.BoxGeometry(22.4, 0.4, 14.4),
-    new THREE.MeshStandardMaterial({ color: 0x4a4e58, roughness: 0.9 })
+    new StdMat({ color: 0x4a4e58, roughness: 0.9 })
   );
   // Slab top sits at y=-0.05, CLEARLY below the floor plane (y=+0.02) so the
   // two surfaces can never Z-fight (horizontal stripe banding) at shallow
@@ -96,7 +101,7 @@ export function buildEnvironment() {
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(22, 14),
-    new THREE.MeshStandardMaterial({ color: 0x454a58, roughness: 0.6, metalness: 0.1 })
+    new StdMat({ color: 0x454a58, roughness: 0.6, metalness: 0.1 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.02; // raised 2cm above slab top (-0.05) -> no Z-fighting
@@ -104,7 +109,7 @@ export function buildEnvironment() {
 
   const brick = makeBrickTexture();
   brick.repeat.set(4, 2);
-  const wallMat = new THREE.MeshStandardMaterial({ map: brick, roughness: 0.95 });
+  const wallMat = new StdMat({ map: brick, roughness: 0.95 });
 
   const farWall = new THREE.Mesh(new THREE.BoxGeometry(22.4, WALL_H, 0.5), wallMat);
   farWall.position.set(0, WALL_H / 2, -7.2);
@@ -117,7 +122,7 @@ export function buildEnvironment() {
   rWall.position.x = 11.2;
   g.add(lWall, rWall);
 
-  const ledgeMat = new THREE.MeshStandardMaterial({ color: 0x1c1e26, roughness: 0.9 });
+  const ledgeMat = new StdMat({ color: 0x1c1e26, roughness: 0.9 });
   for (const y of [STORY, STORY * 2]) {
     const fl = new THREE.Mesh(new THREE.BoxGeometry(22.6, 0.3, 0.7), ledgeMat);
     fl.position.set(0, y, -7.1);
@@ -143,7 +148,7 @@ export function buildEnvironment() {
 export function buildWindows() {
   const g = new THREE.Group();
   const windows = [];
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x14161d, roughness: 0.8 });
+  const frameMat = new StdMat({ color: 0x14161d, roughness: 0.8 });
   const xs = [-9, -6, -3, 0, 3, 6, 9];
   const ys = [1.6, 4.8, 8.0];
   const zc = [-5, -2, 1, 4];
@@ -154,7 +159,7 @@ export function buildWindows() {
     frame.rotation.y = ry;
     const glass = new THREE.Mesh(
       new THREE.PlaneGeometry(1.35, 1.75),
-      new THREE.MeshStandardMaterial({
+      new StdMat({
         color: 0x18243a,
         emissive: 0x000000,
         emissiveIntensity: 1,
@@ -212,10 +217,10 @@ function makeSignTexture(text) {
 
 export function buildDetails() {
   const g = new THREE.Group();
-  const metal = new THREE.MeshStandardMaterial({ color: 0x3a414f, roughness: 0.5, metalness: 0.65 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x20232c, roughness: 0.7 });
-  const orange = new THREE.MeshStandardMaterial({ color: 0xd96a24, roughness: 0.7 });
-  const green = new THREE.MeshStandardMaterial({ color: 0x3f7d4e, roughness: 1 });
+  const metal = new StdMat({ color: 0x3a414f, roughness: 0.5, metalness: 0.65 });
+  const dark = new StdMat({ color: 0x20232c, roughness: 0.7 });
+  const orange = new StdMat({ color: 0xd96a24, roughness: 0.7 });
+  const green = new StdMat({ color: 0x3f7d4e, roughness: 1 });
 
   // --- Fire escape on the right wall (outside x = 11.45)
   const fx = 11.45;
@@ -332,7 +337,7 @@ export function buildDetails() {
   g.add(antenna);
   const beacon = new THREE.Mesh(
     new THREE.SphereGeometry(0.12, 10, 10),
-    new THREE.MeshStandardMaterial({ color: 0xff4040, emissive: 0xff2020, emissiveIntensity: 2.5 })
+    new StdMat({ color: 0xff4040, emissive: 0xff2020, emissiveIntensity: 2.5 })
   );
   beacon.position.set(6.5, roofY + 3.5, 2.5);
   g.add(beacon);

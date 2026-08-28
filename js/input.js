@@ -190,11 +190,14 @@ export class Input {
     this.move.x = x;
     this.move.y = y;
 
-    return {
-      move: { x: this.move.x, y: this.move.y },
-      lookDelta: { x: this.lookDelta.x, y: this.lookDelta.y },
-      actionPressed: this.actionPressed,
-    };
+    // Reuse one result object per frame instead of allocating three.
+    if (!this._out) this._out = { move: {}, lookDelta: {} };
+    this._out.move.x = this.move.x;
+    this._out.move.y = this.move.y;
+    this._out.lookDelta.x = this.lookDelta.x;
+    this._out.lookDelta.y = this.lookDelta.y;
+    this._out.actionPressed = this.actionPressed;
+    return this._out;
   }
 
   consumeLook() {

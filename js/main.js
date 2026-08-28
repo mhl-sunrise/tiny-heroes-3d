@@ -50,9 +50,13 @@ const moon = new THREE.DirectionalLight(0xf3e6d0, 1.55);
 moon.position.set(-8, 20, 10);
 scene.add(moon);
 scene.add(new THREE.AmbientLight(0x6a7598, 1.0));
-const fill = new THREE.DirectionalLight(0xd6def0, 0.5);
-fill.position.set(10, 12, 8);
-scene.add(fill);
+// 4th scene light: on phones every per-pixel light is real cost, so the warm
+// fill (barely visible at night anyway) is desktop-only.
+if (PERF.fillLight) {
+  const fill = new THREE.DirectionalLight(0xd6def0, 0.5);
+  fill.position.set(10, 12, 8);
+  scene.add(fill);
+}
 
 // --- World + post + input + audio ---
 const world = createWorld(scene);
@@ -77,6 +81,10 @@ window.__game = game;
 // shown on screen and the last frame keeps drawing.
 let last = performance.now();
 let crashed = false;
+// Frame-rate cap: on 120/144Hz phones rAF fires at display rate, doubling
+// the per-second GPU cost for zero gameplay gain. We only process a frame
+// once at least 1000/cap ms has passed (skipped ticks just extend the dt).
+const MIN_FRAME_MS = PERF.frameRateCap ? 1000 / PERF.frameRateCap - 1 : 0;
 function showCrash(err) {
   if (crashed) return;
   crashed = true;
@@ -92,8 +100,10 @@ function showCrash(err) {
 window.addEventListener("error", (e) => showCrash(e.error || e.message));
 function loop(now) {
   requestAnimationFrame(loop);
-  let dt = (now - last) / 1000;
+  const elapsed = now - last;
+  if (MIN_FRAME_MS && elapsed < MIN_FRAME_MS) return; // 120Hz tick: skip
   last = now;
+  let dt = elapsed / 1000;
   dt = Math.min(dt, 0.05);
   try {
     game.update(dt);

@@ -3,7 +3,11 @@
 // of the floor with real gravity, ending in a dust puff. Everything is
 // pooled; impacts are reported back to game.js via the update() callback.
 import * as THREE from "three";
-import { DEBRIS } from "../config.js";
+import { DEBRIS, PERF } from "../config.js";
+
+// Phones can't afford the PBR (Standard) fragment cost: same colors/emissive,
+// much cheaper Lambert. Desktop keeps the full PBR look.
+const StdMat = PERF.useLambert ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
 
 const POOL = 10;
 
@@ -13,8 +17,8 @@ export function buildDebris() {
   // --- falling chunks (pooled) ------------------------------------------
   const brickGeo = new THREE.BoxGeometry(0.26, 0.2, 0.3);
   const fireGeo = new THREE.BoxGeometry(0.3, 0.24, 0.26);
-  const brickMat = new THREE.MeshStandardMaterial({ color: 0x8a4a32, roughness: 1 });
-  const fireMat = new THREE.MeshStandardMaterial({
+  const brickMat = new StdMat({ color: 0x8a4a32, roughness: 1 });
+  const fireMat = new StdMat({
     color: 0xff5a1e,
     emissive: 0xff6a1e,
     emissiveIntensity: 2.2,

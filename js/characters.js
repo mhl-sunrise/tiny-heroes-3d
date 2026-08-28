@@ -3,10 +3,15 @@
 // is geometry + PBR materials + small canvas textures, so it stays tiny and
 // loads fast.
 import * as THREE from "three";
+import { PERF } from "./config.js";
+
+// Phones can't afford the PBR (Standard) fragment cost: same colors/emissive,
+// much cheaper Lambert. Desktop keeps the full PBR look.
+const StdMat = PERF.useLambert ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
 
 /* ----------------------------- tiny helpers ----------------------------- */
 function std(color, o = {}) {
-  return new THREE.MeshStandardMaterial(
+  return new StdMat(
     Object.assign({ color, roughness: 0.85, metalness: 0.0 }, o)
   );
 }
@@ -42,7 +47,7 @@ function buildFace(head, { skin, eye = 0x6b4a2f, brow, r = 0.24, mood = "smile" 
   const irisMat = std(eye, { roughness: 0.25 });
   const browMat = std(brow, { roughness: 0.9 });
   const lipMat = std(0xb5606a, { roughness: 0.6 });
-  const cheekMat = new THREE.MeshStandardMaterial({
+  const cheekMat = new StdMat({
     color: 0xff9d86,
     roughness: 0.8,
     transparent: true,

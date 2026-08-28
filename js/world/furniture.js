@@ -3,10 +3,14 @@
 // Each floor is a group in FLOOR-LOCAL coordinates (y=0 at the floor face);
 // world/index.js shows only the current one and lifts it to the right height.
 import * as THREE from "three";
-import { MAZE } from "../config.js";
+import { MAZE, PERF } from "../config.js";
+
+// Phones can't afford the PBR (Standard) fragment cost: same colors/emissive,
+// much cheaper Lambert. Desktop keeps the full PBR look.
+const StdMat = PERF.useLambert ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
 
 function std(color, o = {}) {
-  return new THREE.MeshStandardMaterial(
+  return new StdMat(
     Object.assign({ color, roughness: 0.9 }, o)
   );
 }
@@ -141,13 +145,13 @@ function buildSecondFloor() {
   // burnt floor hole with a ring of glowing embers
   const hole = new THREE.Mesh(
     new THREE.CircleGeometry(1.05, 18),
-    new THREE.MeshStandardMaterial({ color: 0x050403, roughness: 1 })
+    new StdMat({ color: 0x050403, roughness: 1 })
   );
   hole.rotation.x = -Math.PI / 2;
   hole.position.set(-1.5, 0.03, -3.5);
   const emberRing = new THREE.Mesh(
     new THREE.RingGeometry(1.0, 1.25, 20),
-    new THREE.MeshStandardMaterial({
+    new StdMat({
       color: 0x3a1204,
       emissive: 0xff5a1e,
       emissiveIntensity: 1.6,
