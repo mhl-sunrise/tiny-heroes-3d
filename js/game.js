@@ -468,12 +468,12 @@ export class Game {
     // Fire audio: ambient roar grows with fire level, plus a proximity boost
     // from the NEAREST burning spot — a murmur across the room, a roar when
     // you stand right next to a flame.
-    const h = this.heroes[0];
+    const me = this.heroes[0];
     let near = Infinity;
     let nearBurn = 0;
     for (const s of this.fires) {
       if (!s.active) continue;
-      const d = Math.hypot(h.x - s.x, h.z - s.z);
+      const d = Math.hypot(me.x - s.x, me.z - s.z);
       if (d < near) {
         near = d;
         nearBurn = s.fire.intensity;
