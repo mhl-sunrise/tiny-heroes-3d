@@ -190,7 +190,6 @@ function makeKidUpdate(k) {
   return function update(dt, state) {
     const moving = state.moving;
     const spd = state.moveSpeed || 0;
-    const carrying = !!state.carrying;
     k._amp += ((moving ? 1 : 0) - k._amp) * Math.min(1, dt * 8);
     if (moving) phase += dt * (5.5 + spd * 6);
     const s = Math.sin(phase);
@@ -198,52 +197,22 @@ function makeKidUpdate(k) {
     const t = state.time || 0;
     const idle = 1 - k._amp;
 
-    if (state.dragging) {
-      // Fireman's carry: the victim rests across the shoulders, so both hands
-      // come up from IN FRONT and tuck under the load — right hand under the
-      // drooping head, left hand under the knees — like actually supporting
-      // someone. Arms pump gently with the stride; torso leans into the weight.
-      k.armR.rotation.x = -2.1 + s * 0.07;
-      k.armR.rotation.y = 0.55;
-      k.armR.rotation.z = -0.15;
-      k.armL.rotation.x = -1.6 + s * 0.07;
-      k.armL.rotation.y = -0.55;
-      k.armL.rotation.z = 0.15;
-      k.legL.rotation.x = s * 0.45;
-      k.legR.rotation.x = -s * 0.45;
-      k.torso.rotation.x = 0.2;
-    } else if (carrying) {
-      k.armL.rotation.x = -0.75;
-      k.armR.rotation.x = -0.75;
-      k.armL.rotation.z = 0.3;
-      k.armR.rotation.z = -0.3;
-      k.legL.rotation.x = s * 0.28;
-      k.legR.rotation.x = -s * 0.28;
-      k.torso.rotation.x = 0.1;
-    } else {
-      k.armL.rotation.x = s * amp;
-      k.armR.rotation.x = -s * amp;
-      // clear any twist left over from the carry pose
-      k.armL.rotation.y = 0;
-      k.armR.rotation.y = 0;
-      k.armL.rotation.z = 0.05 + Math.sin(t * 1.5) * 0.05 * idle;
-      k.armR.rotation.z = -0.05 - Math.sin(t * 1.5) * 0.05 * idle;
-      k.legL.rotation.x = -s * amp * 0.95;
-      k.legR.rotation.x = s * amp * 0.95;
-      k.torso.rotation.x = 0;
-    }
+    // normal arm + leg swing (walking or idle)
+    k.armL.rotation.x = s * amp;
+    k.armR.rotation.x = -s * amp;
+    k.armL.rotation.y = 0;
+    k.armR.rotation.y = 0;
+    k.armL.rotation.z = 0.05 + Math.sin(t * 1.5) * 0.05 * idle;
+    k.armR.rotation.z = -0.05 - Math.sin(t * 1.5) * 0.05 * idle;
+    k.legL.rotation.x = -s * amp * 0.95;
+    k.legR.rotation.x = s * amp * 0.95;
+    k.torso.rotation.x = 0;
 
     k.torso.position.y = 0.84 + Math.abs(Math.sin(phase)) * 0.03 * k._amp;
     k.body.position.y =
       Math.abs(Math.sin(phase)) * 0.02 * k._amp + Math.sin(t * 2) * 0.008 * idle;
     k.head.rotation.x = Math.sin(t * 1.3) * 0.03 + (moving ? -0.05 : 0);
     k.head.rotation.y = Math.sin(t * 0.9) * 0.05;
-
-    // Exposed for the carry: the combined body bounce and the stride phase.
-    // A carried person springs against exactly these, so they stay in step
-    // with the hero instead of floating on their own clock.
-    k._bobY = k.body.position.y + (k.torso.position.y - 0.84);
-    k._step = s * k._amp;
   };
 }
 // Fake contact shadow (cheap, looks great over a dark floor).
@@ -531,16 +500,22 @@ export function createVictim(opts = {}) {
   );
   const shoeMat = std(0x22190f, { roughness: 0.5 });
 
-  // Legs + shoes
-  for (const sx of [-1, 1]) {
-    const leg = capsule(0.09, 0.24, pantsMat);
-    leg.position.set(sx * 0.1, 0.5, 0);
-    body.add(leg);
+  // Legs + shoes (hip-pivoted groups so the follow-walk swings look right)
+  const mkLeg = (sx) => {
+    const leg = new THREE.Group();
+    leg.position.set(sx * 0.1, 0.55, 0);
+    const c = capsule(0.09, 0.24, pantsMat);
+    c.position.y = -0.05;
+    leg.add(c);
     const shoe = mesh(new THREE.SphereGeometry(0.085, 14, 12), shoeMat);
     shoe.scale.set(1, 0.7, 1.35);
-    shoe.position.set(sx * 0.1, 0.07, 0.04);
-    body.add(shoe);
-  }
+    shoe.position.set(0, -0.48, 0.04);
+    leg.add(shoe);
+    body.add(leg);
+    return leg;
+  };
+  const legL = mkLeg(-1);
+  const legR = mkLeg(1);
 
   // Torso + collar + buttons
   const torso = capsule(0.17, 0.34, shirtMat);
@@ -646,19 +621,35 @@ export function createVictim(opts = {}) {
 
   addBlob(g, 0.6);
   const phase = Math.random() * Math.PI * 2;
+  let walkPhase = 0; // stride clock while following the hero
 
-  function update(time) {
+  function update(time, opts = {}) {
     const t = time + phase;
-    // scared waving + trembling
-    armR.rotation.x = -1.1 + Math.sin(t * 3.2) * 0.5;
-    armR.rotation.z = -0.5 + Math.sin(t * 3.2) * 0.14;
-    armL.rotation.x = Math.sin(t * 1.7) * 0.1;
+    const walkDt = opts.walkDt || 0;
+    if (walkDt > 0) walkPhase += walkDt * 9;
+    const stride = Math.sin(walkPhase);
+    if (walkDt > 0) {
+      // follow-walk: legs + arms swing in opposition, body bobs with the step
+      legL.rotation.x = stride * 0.55;
+      legR.rotation.x = -stride * 0.55;
+      armL.rotation.x = -stride * 0.5;
+      armR.rotation.x = opts.waving ? -1.1 + Math.sin(t * 6) * 0.5 : stride * 0.5;
+      armR.rotation.z = 0;
+      body.position.y = Math.abs(Math.cos(walkPhase)) * 0.03;
+    } else {
+      // scared waving + trembling (still trapped)
+      legL.rotation.x = 0;
+      legR.rotation.x = 0;
+      armR.rotation.x = -1.1 + Math.sin(t * 3.2) * 0.5;
+      armR.rotation.z = -0.5 + Math.sin(t * 3.2) * 0.14;
+      armL.rotation.x = Math.sin(t * 1.7) * 0.1;
+      body.position.y = Math.abs(Math.sin(t * 2.2)) * 0.02;
+    }
     mark.position.y = 1.82 + Math.sin(t * 2) * 0.09;
     mark.rotation.y = t * 1.6;
-    body.position.y = Math.abs(Math.sin(t * 2.2)) * 0.02;
     body.position.x = Math.sin(t * 24) * 0.006; // nervous tremble
     body.rotation.z = Math.sin(t * 24) * 0.01;
     halo.material.opacity = 0.55 + Math.sin(t * 4) * 0.2;
   }
-  return { g, update, halo, mark, armR, armL, body, head };
+  return { g, update, halo, mark, armR, armL, body, head, legL, legR };
 }

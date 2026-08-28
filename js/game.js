@@ -1,5 +1,5 @@
-// game.js — game logic: the firefighter hero, the trapped people (CARRIED
-// across the shoulders to safety), camera, fire spread, health + score
+// game.js — game logic: the firefighter hero, the trapped people (freed and
+// following you to the safe zone), camera, fire spread, health + score
 // systems, the multistory floor system and the three-shift level flow.
 import * as THREE from "three";
 import { createFirefighter, createVictim } from "./characters.js";
@@ -101,13 +101,16 @@ export class Game {
       v.z = d.z;
       v.saved = false;
       v.state = "idle";
-      v.carrying = null;
       v.saveT = 0;
       v.g.position.set(d.x, this.floorY, d.z);
       this.scene.add(v.g);
       this.victims.push(v);
     }
     this.totalCount = this.victims.length;
+    // Path history (the hero's recent route). Freed victims walk this ribbon
+    // to follow you, so they can never get stuck on a maze obstacle -- they
+    // retrace exactly where the hero has already walked.
+    this.heroTrail = [];
     // reset the tension layer for the new shift
     this.debris.setFloor(this.floorY);
     this.shake = 0;
@@ -195,8 +198,7 @@ export class Game {
     }
     const faceAngle = moving ? Math.atan2(vx, vz) : null;
 
-    // carrying someone is slower — the cost of a grab
-    const speed = HERO.speed * (this.heroes[0] && this.heroes[0].carry ? HERO.carrySpeedMul : 1);
+    const speed = HERO.speed;
 
     for (const k of this.heroes) {
       if (moving) {
@@ -212,118 +214,92 @@ export class Game {
       k.update(dt, {
         moving,
         moveSpeed: moving ? 1 : 0,
-        carrying: k.carry,
-        dragging: !!k.carry,
         time,
       });
     }
-    this.updateCarried(dt);
+    this.updateFollowers(dt);
   }
 
-  // Fireman's carry: the victim lies across the hero's shoulders — head over
-  // the right shoulder (drooping), legs over the left, face toward the
-  // direction of travel. The body has WEIGHT: it bounces against the hero's
-  // own step (a little late), drifts around when the hero turns, and the head
-  // and arms sway like a limp passenger instead of being welded to the mesh.
-  updateCarried(dt) {
-    for (const v of this.victims) {
-      if (!v.carrying) continue;
-      const h = v.carrying;
-      v.mark.visible = false;
-      v.halo.visible = false;
-      if (v._rescaled !== true) {
-        v.g.scale.setScalar(0.78);
-        v._rescaled = true;
-        v.g.rotation.order = "YXZ";
-        v._spring = { y: 1.42, yaw: h.g.rotation.y, step: 0, limp: 0 };
-        v._ph = Math.random() * Math.PI * 2;
+  // Freed victims walk behind you to the safe zone. Each one retraces the
+  // hero's own path history (heroTrail) at a fixed arc-length back, so the
+  // group can never get stuck on a maze obstacle -- they only ever walk
+  // where the hero has already been.
+  updateFollowers(dt) {
+    if (this.state !== "playing") return;
+    const me = this.heroes[0];
+    // record the route (points ~0.12 m apart, newest last)
+    const tr = this.heroTrail;
+    const last = tr[tr.length - 1];
+    if (!last || Math.hypot(me.x - last.x, me.z - last.z) > 0.12) {
+      tr.push({ x: me.x, z: me.z });
+      if (tr.length > 140) tr.shift();
+    }
+    const idx = [];
+    for (let i = 0; i < this.victims.length; i++) if (this.victims[i].state === "following") idx.push(i);
+    const SPACING = 1.05; // gap between followers in the line
+    const SPEED = HERO.speed * 1.3; // a bit quicker so they can catch up
+    for (let f = 0; f < idx.length; f++) {
+      const v = this.victims[idx[f]];
+      const target = this.trailPoint(tr, (f + 1) * SPACING);
+      const dx = target.x - v.x;
+      const dz = target.z - v.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 0.05) {
+        const step = Math.min(d, SPEED * dt);
+        v.x += (dx / d) * step;
+        v.z += (dz / d) * step;
+        this.pushOutObstacles(v, 0.3);
+        v.g.rotation.y = lerpAngle(v.g.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 10));
       }
-      const sp = v._spring;
-
-      // 1) WEIGHT — chase the hero's step bounce with a slight lag, so the
-      //    body lands on the shoulders a frame behind the hero's own bob.
-      const targetY = 1.42 + (h._bobY || 0) * 1.35;
-      sp.y += (targetY - sp.y) * Math.min(1, dt * 9);
-
-      // 2) TURNING — the load lags the hero's heading, so it visibly "drifts"
-      //    around the shoulders when you spin (instead of teleporting).
-      sp.yaw = lerpAngle(sp.yaw, h.g.rotation.y, Math.min(1, dt * 6));
-
-      // 3) STRIDE — a lagged copy of the hero's step phase drives the sway.
-      sp.step += ((h._step || 0) - sp.step) * Math.min(1, dt * 7);
-
-      // 4) LIMP — the head droop + arm drape ease in over ~0.3s on grab
-      //    (no pose snap) and ease back out when the person is set down.
-      sp.limp += ((v.state === "carried" ? 1 : 0) - sp.limp) * Math.min(1, dt * 6);
-      const L = sp.limp;
-
-      // Rest across the shoulders, a touch behind the neck (over the spine).
-      const ry = sp.yaw;
-      const back = 0.07;
-      v.g.position.set(
-        h.x - Math.sin(ry) * back,
-        this.heroY + sp.y,
-        h.z - Math.cos(ry) * back
-      );
-      // Head end droops over the right shoulder and dips with each stride;
-      // the small x-tilt rolls the chest with the step (YXZ: z lays the body
-      // sideways first, x then rolls it along its own long axis).
-      const droop = 0.12 + 0.1 * L + Math.max(0, sp.step) * 0.06 * L;
-      v.g.rotation.set(sp.step * 0.06 * L, ry, -Math.PI / 2 - droop);
-
-      // LIMP HEAD — face tips down toward the shoulder (local +X is world-down
-      // in this pose) and rolls gently with the stride + a slow personal wobble.
-      if (v.head) {
-        const wobble = Math.sin(this._t * 1.7 + v._ph) * 0.05 * L;
-        v.head.rotation.set((0.28 + wobble) * L, (0.34 + sp.step * 0.05) * L, sp.step * 0.12 * L);
+      v.g.position.set(v.x, this.heroY, v.z);
+      v.update(this._t, {
+        walkDt: d > 0.3 ? dt : 0, // walk cycle while actually moving
+        waving: true, // a freed kid happily waves along
+      });
+    }
+  }
+  // A point L metres back along the path ribbon (clamped to its start).
+  trailPoint(tr, L) {
+    if (!tr.length) return { x: this.heroes[0].x, z: this.heroes[0].z };
+    if (tr.length === 1) return tr[0];
+    for (let i = tr.length - 1; i > 0; i--) {
+      const dx = tr[i].x - tr[i - 1].x;
+      const dz = tr[i].z - tr[i - 1].z;
+      const seg = Math.hypot(dx, dz);
+      if (seg >= L) return { x: tr[i].x, z: tr[i].z };
+      L -= seg;
+    }
+    return tr[0];
+  }
+  // Push a circle out of the maze boxes (same resolution as the hero's).
+  pushOutObstacles(o, R) {
+    for (const b of this.world.colliders) {
+      const minX = b.minX - R,
+        maxX = b.maxX + R;
+      const minZ = b.minZ - R,
+        maxZ = b.maxZ + R;
+      if (o.x > minX && o.x < maxX && o.z > minZ && o.z < maxZ) {
+        const dxl = o.x - minX,
+          dxr = maxX - o.x,
+          dzl = o.z - minZ,
+          dzr = maxZ - o.z;
+        const m = Math.min(dxl, dxr, dzl, dzr);
+        if (m === dxl) o.x = minX;
+        else if (m === dxr) o.x = maxX;
+        else if (m === dzl) o.z = minZ;
+        else o.z = maxZ;
       }
-      // DRAPED ARMS — ease from the idle hang into a drape down the hero's
-      // back (world-down ≈ local +X here), swinging with the stride.
-      if (v.armR) v.armR.rotation.set(sp.step * 0.2 * L, 0, (1.45 + sp.step * 0.16) * L);
-      if (v.armL) v.armL.rotation.set(-sp.step * 0.2 * L, 0, (1.62 - sp.step * 0.16) * L);
-      if (v.body) {
-        v.body.position.set(0, 0, 0);
-        v.body.rotation.set(0, 0, 0);
-      }
-      v.x = h.x;
-      v.z = h.z;
     }
   }
 
-  // Eases a person's head/arm Euler angles from the captured carried pose
-  // toward the idle pose by factor k — used while stepping down after a carry.
-  _easeLimb(v, p, k) {
-    if (p.head && v.head) v.head.rotation.set(p.head.x * k, p.head.y * k, p.head.z * k);
-    if (p.armL && v.armL) v.armL.rotation.set(p.armL.x * k, p.armL.y * k, p.armL.z * k);
-    if (p.armR && v.armR) v.armR.rotation.set(p.armR.x * k, p.armR.y * k, p.armR.z * k);
-  }
-
   tryPickup() {
+    // Tap a trapped person to free them: they get to their feet and follow
+    // you to the safe zone (they save themselves once they reach it).
     for (const h of this.heroes) {
-      // action button while carrying = set the person down
-      if (h.carry) {
-        const v = h.carry;
-        h.carry = null;
-        v.carrying = null;
-        v.state = "standing";
-        v.standT = 0;
-        v._dropY = v.g.position.y; // they step down from shoulder height
-        // remember the exact carried pose so the stand-down eases from it
-        v._dropPose = {
-          rx: v.g.rotation.x,
-          ry: v.g.rotation.y,
-          rz: v.g.rotation.z,
-          head: v.head ? v.head.rotation.clone() : null,
-          armL: v.armL ? v.armL.rotation.clone() : null,
-          armR: v.armR ? v.armR.rotation.clone() : null,
-        };
-        this.audio.grab();
-        return;
-      }
       let best = null;
       let bd = HERO.interactRadius;
       for (const v of this.victims) {
-        if (v.saved || v.carrying) continue;
+        if (v.saved || v.state !== "idle") continue;
         const d = Math.hypot(v.x - h.x, v.z - h.z);
         if (d < bd) {
           bd = d;
@@ -331,30 +307,23 @@ export class Game {
         }
       }
       if (best) {
-        best.carrying = h;
-        h.carry = best;
-        best.state = "carried";
+        best.state = "following";
+        best.mark.visible = false; // out of danger -- the "!" mark goes away
         this.audio.grab();
         return;
       }
     }
   }
 
-  saveVictim(v, h) {
-    if (h.carry === v) h.carry = null;
-    v.carrying = null;
+  saveVictim(v) {
+    // A freed person reached the green zone on their own feet.
     v.saved = true;
     v.state = "saving";
-    v.saveT = 0;
-    v._saveY = v.g.position.y; // rescued from the shoulders
-    // remember the carried pose so the step-down eases from the real droop
-    v._dropPose = {
-      rx: v.g.rotation.x,
-      rz: v.g.rotation.z,
-      head: v.head ? v.head.rotation.clone() : null,
-      armL: v.armL ? v.armL.rotation.clone() : null,
-      armR: v.armR ? v.armR.rotation.clone() : null,
-    };
+    // start straight at the "rise, spin, fade" part (they're standing, so no
+    // step-down needed); _saveY + 1.42 keeps the floor math in updateVictims
+    v.saveT = 0.3;
+    v._saveY = v.g.position.y + 1.42;
+    v._dropPose = null;
     this.savedCount++;
     this.score.addRescue();
     this.audio.save();
@@ -365,56 +334,24 @@ export class Game {
     for (const v of this.victims) {
       if (v.saved) {
         if (v.state === "saving") {
+          // rise, spin, fade to safety (starts standing, so no step-down)
           v.saveT += dt;
-          const base = v._rescaled ? 0.78 : 1;
-          const floor = (v._saveY || 0) - 1.42; // ground under the shoulders
-          const p = v._dropPose;
-          const pRx = p ? p.rx : 0;
-          const pRz = p ? p.rz : -Math.PI / 2 - 0.12;
-          if (v.saveT < 0.3) {
-            const s = v.saveT / 0.3;
-            const e = s * s * (3 - 2 * s); // step down off the back
-            v.g.rotation.x = pRx * (1 - e);
-            v.g.rotation.z = pRz * (1 - e);
-            v.g.position.y = floor + 1.42 * (1 - e);
-            if (p) this._easeLimb(v, p, 1 - e);
-          } else {
-            const t2 = v.saveT - 0.3; // rise, spin, fade to safety
-            const s = Math.max(0, 1 - t2 / 0.5);
-            v.g.scale.setScalar(Math.max(0.001, s * base));
-            v.g.position.y = floor + t2 * 2.2;
-            v.g.rotation.y += dt * 6;
-            if (t2 > 0.5) v.g.visible = false;
-          }
+          const t2 = v.saveT - 0.3;
+          const floor = (v._saveY || 0) - 1.42; // ground under the person
+          const s = Math.max(0, 1 - t2 / 0.5);
+          v.g.scale.setScalar(Math.max(0.001, s));
+          v.g.position.y = floor + t2 * 2.2;
+          v.g.rotation.y += dt * 6;
+          if (t2 > 0.5) v.g.visible = false;
         }
         continue;
       }
-      if (v.state === "standing") {
-        v.mark.visible = true; // un-hide the "!" mark + halo from the carry
-        v.halo.visible = true;
-        v.standT += dt; // set down: step off the back to the floor
-        const s = Math.min(1, v.standT / 0.25);
-        const e = s * s * (3 - 2 * s);
-        const floor = (v._dropY || 0) - 1.42;
-        const p = v._dropPose;
-        const pRx = p ? p.rx : 0;
-        const pRz = p ? p.rz : -Math.PI / 2 - 0.12;
-        v.g.rotation.x = pRx * (1 - e);
-        v.g.rotation.z = pRz * (1 - e);
-        v.g.position.y = floor + 1.42 * (1 - e);
-        if (p) this._easeLimb(v, p, 1 - e);
-        if (s >= 1) {
-          v.g.rotation.set(0, 0, 0);
-          v.g.position.y = floor;
-          v.state = "idle";
-        }
-        continue;
-      }
-      if (v.state !== "carried") {
-        v.x = v.g.position.x;
-        v.z = v.g.position.z;
-        v.update(t);
-      }
+      // "following" is driven by updateFollowers(); "saving" above. For idle
+      // (still trapped) victims: sync position + keep the scared idle pose.
+      if (v.state === "following") continue;
+      v.x = v.g.position.x;
+      v.z = v.g.position.z;
+      v.update(t);
     }
   }
 
@@ -424,21 +361,18 @@ export class Game {
       return;
     }
     this.prompt = "";
-    for (const h of this.heroes) {
-      if (h.carry) {
-        const d = Math.hypot(h.x - EXIT.x, h.z - EXIT.z);
-        if (d < EXIT.r + 1.6) {
-          this.prompt = "🏁  Safe zone — let go to save";
-          break;
-        }
-      }
+    const following = this.victims.some((v) => v.state === "following");
+    if (following) {
+      const h = this.heroes[0];
+      const d = Math.hypot(h.x - EXIT.x, h.z - EXIT.z);
+      this.prompt =
+        d < EXIT.r + 1.6 ? "🏁  Safe zone — they'll finish it" : "👣  They're following you to the safe zone";
     }
     if (!this.prompt) {
       outer: for (const h of this.heroes) {
-        if (h.carry) continue;
         for (const v of this.victims) {
-          if (!v.saved && !v.carrying && Math.hypot(v.x - h.x, v.z - h.z) < HERO.interactRadius) {
-            this.prompt = "✋  Grab & carry (E / button)";
+          if (!v.saved && v.state === "idle" && Math.hypot(v.x - h.x, v.z - h.z) < HERO.interactRadius) {
+            this.prompt = "✋  Free them (E / button)";
             break outer;
           }
         }
@@ -716,7 +650,7 @@ export class Game {
       a.x = this._enterFrom + (this._enterTo - this._enterFrom) * e;
       a.g.position.set(a.x, this.heroY, a.z);
       a.g.rotation.y = -Math.PI / 2; // facing the wall he's stepping through
-      a.update(dt, { moving: true, moveSpeed: 0.7, carrying: false, time: this._t });
+      a.update(dt, { moving: true, moveSpeed: 0.7, time: this._t });
       this.world.update(dt, this._t, this._lastLvl);
       this.prompt = "";
       this.updateCamera(dt);
@@ -737,7 +671,7 @@ export class Game {
       this.world.update(dt, this._t, lvl);
       this.debris.update(dt, null); // let any in-flight chunks land silently
       for (const k of this.heroes)
-        k.update(dt, { moving: false, moveSpeed: 0, carrying: k.carry, time: this._t });
+        k.update(dt, { moving: false, moveSpeed: 0, time: this._t });
       this.updateVictims(dt);
       if (this.state === "title") this.yaw += dt * 0.12; // slow cinematic orbit
       this.updateCamera(dt);
@@ -754,9 +688,10 @@ export class Game {
     this.updateHeroes(dt, mv, this.time);
     if (this.input.consumeAction()) this.tryPickup();
 
-    for (const h of this.heroes) {
-      if (h.carry && Math.hypot(h.x - EXIT.x, h.z - EXIT.z) < EXIT.r + 0.3) {
-        this.saveVictim(h.carry, h);
+    // freed people save themselves: they count the moment THEY reach the zone
+    for (const v of this.victims) {
+      if (v.state === "following" && Math.hypot(v.x - EXIT.x, v.z - EXIT.z) < EXIT.r + 0.3) {
+        this.saveVictim(v);
       }
     }
     this.updateVictims(dt);

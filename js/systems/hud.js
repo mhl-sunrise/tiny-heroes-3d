@@ -97,10 +97,9 @@ export function createHud() {
     // low-time warning
     timerBoxEl.classList.toggle("low", game.timeLeft < 20 && game.state === "playing");
 
-    // action button: grab vs. let go
-    const carrying = game.heroes.some((h) => h.carry);
-    setTxt(actionBtn, "action", carrying ? "🏁" : "✋");
-    actionBtn.classList.toggle("grab", !carrying);
+    // action button: free a trapped person (same action all the time now)
+    setTxt(actionBtn, "action", "✋");
+    actionBtn.classList.toggle("grab", true);
 
     // interact prompt
     setTxt(promptEl, "prompt", game.prompt || "");

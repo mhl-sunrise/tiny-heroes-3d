@@ -104,7 +104,6 @@ export const SCORE = {
 
 export const HERO = {
   speed: 5.4,
-  carrySpeedMul: 0.68, // slow down while carrying someone on the back
   interactRadius: 1.3,
 };
 
